@@ -11,13 +11,16 @@
   script=$(mktemp /tmp/soft-router-doctor-bootstrap.XXXXXX) || exit 1
   trap 'rm -f "$script"' EXIT
   url=https://raw.githubusercontent.com/slobys/SoftRouterDoctor/codex/preview/install.sh
-  if command -v uclient-fetch >/dev/null 2>&1; then
-    uclient-fetch -q -T 20 -O "$script" "$url"
-  elif command -v curl >/dev/null 2>&1; then
-    curl -fsSL --proto '=https' --proto-redir '=https' --max-time 35 -o "$script" "$url"
+  if command -v curl >/dev/null 2>&1 &&
+    curl -fsSL --proto '=https' --proto-redir '=https' --connect-timeout 8 --max-time 25 -o "$script" "$url"; then
+    :
+  elif command -v uclient-fetch >/dev/null 2>&1; then
+    uclient-fetch -4 -q -T 12 -O "$script" "$url" ||
+      uclient-fetch -6 -q -T 12 -O "$script" "$url" || exit 1
   else
-    wget -q -T 20 -O "$script" "$url"
-  fi && sh "$script"
+    wget -q -T 20 -O "$script" "$url" || exit 1
+  fi
+  sh "$script"
 )
 ~~~
 

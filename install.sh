@@ -28,11 +28,16 @@ FILES
 }
 
 get_file() {
-	case "$downloader" in
-		uclient-fetch|wget) "$downloader" -q -T 20 -O "$2" "$1" ;;
-		curl) curl -fsSL --proto '=https' --proto-redir '=https' --max-time 35 -o "$2" "$1" ;;
-		*) return 1 ;;
-	esac
+	if command -v curl >/dev/null 2>&1 &&
+		curl -fsSL --proto '=https' --proto-redir '=https' --connect-timeout 8 --max-time 25 -o "$2" "$1"; then
+		return 0
+	fi
+	if command -v uclient-fetch >/dev/null 2>&1; then
+		uclient-fetch -4 -q -T 12 -O "$2" "$1" ||
+			uclient-fetch -6 -q -T 12 -O "$2" "$1"
+		return
+	fi
+	command -v wget >/dev/null 2>&1 && wget -q -T 20 -O "$2" "$1"
 }
 
 valid_revision() {
@@ -126,13 +131,11 @@ prepare_payload() {
 	if [ -n "$local_dir" ]; then
 		cp "$local_dir/SHA256SUMS" "$stage/SHA256SUMS" || fail '本地 SHA256SUMS 不可读取。'
 	else
-		for candidate in uclient-fetch curl wget; do
-			if command -v "$candidate" >/dev/null 2>&1; then
-				downloader=$candidate
-				break
-			fi
-		done
-		[ -n "$downloader" ] || fail '找不到下载器。可使用 --local 离线安装。'
+		if ! command -v curl >/dev/null 2>&1 &&
+			! command -v uclient-fetch >/dev/null 2>&1 &&
+			! command -v wget >/dev/null 2>&1; then
+			fail '找不到下载器。可使用 --local 离线安装。'
+		fi
 		if [ -z "$revision" ]; then
 			get_file "https://api.github.com/repos/$REPO/commits/$BRANCH" "$stage/commit.json" ||
 				fail '无法解析 GitHub 预览分支。可通过 --ref 指定已知的完整提交。'
@@ -187,7 +190,6 @@ usage() {
 
 local_dir=
 revision=
-downloader=
 uninstall=0
 while [ "$#" -gt 0 ]; do
 	case "$1" in
