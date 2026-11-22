@@ -1,5 +1,13 @@
 # 预览版验证记录
 
+## v0.7 浏览器内一键发现拓扑
+
+在 NanoPi R4S 的 iStoreOS 25.12.6 和 Argon 上验证提交 `4642e0cbe14ceb95cc3d322fe6fbabb528f53828`。Windows Chromium 从局域网直接打开 LuCI，点击一次 **网络拓扑** 后，从本次 LuCI 连接识别出电脑地址，并在 R4S 邻居表和桥接表中关联到 `eth1`。测试期间未运行电脑检测脚本，也未导入报告。
+
+- 实际从 R4S 的 LAN 口识别 TP-Link TL-XDR5430 的无线 AP 通告，以及 IEEE 1905.1 Supported Service 中的 Multi-AP 控制器通告。识别到 360 路由器管理页，页面将工作模式标为待核实。电脑一侧上一版通过本机抓包识别的另一台 TP-Link 未获得足以定位的证据，界面用虚线标明中间顺序待确认。
+- 验证了未登录和缺少拓扑读取权限时均不能取得连接来源，客户端附带的转发头不会覆盖真实连接地址。实际页面在桌面和 390 像素宽度显示正常。
+- 实机运行 `tests/topology.sh` 和 `tests/router-discovery.sh`，在隔离数据中覆盖 IPv4/IPv6 邻居、经 LAN 返回的下一跳、回环、无效地址、Mesh 控制器与代理节点通告，以及对转发帧和截断帧的排除。Mesh 代理节点和 IPv6 页面连接未做实机业务验证。安装前后 network、firewall、dhcp 配置摘要一致。
+
 ## v0.6 路由设备自动发现
 
 在 NanoPi R4S 的 iStoreOS 25.12.6 和 Argon 上验证提交 `b727df4232e9df1bb6c7d2d6d1a03a31a47a3bc6`。从 R4S 的 LAN 口和 Windows 电脑网卡分别收到同型号的两台 TP-Link TL-XDR5430 的 LLDP 通告。两台设备使用不同的管理地址和 MAC，各自通告启用了 WLAN AP。在实际浏览器验证两台设备分别显示在拓扑的两端，中间接线显示为待确认。360 T7 由 DHCP 自报名和管理页识别，并显示为接线位置待核实。
