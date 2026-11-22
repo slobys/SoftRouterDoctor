@@ -618,13 +618,13 @@ EOF
 ) 9< "$APK_DB_LOCK" 2>/dev/null
 
 process_snapshot() {
-	LC_ALL=C awk -v memory="$1" 'BEGIN {
+	LC_ALL=C awk -v memory="$1" -v observer="$$" 'BEGIN {
 		for (i = 1; i < ARGC; i++) {
 			file = ARGV[i]
 			if ((getline row < file) != 1) { close(file); continue }
 			close(file)
 			pid = row + 0
-			if (!pid) continue
+			if (!pid || pid == observer) continue
 			name = row
 			sub(/^[0-9]+ \(/, "", name)
 			sub(/\) [^)]*$/, "", name)
@@ -661,8 +661,8 @@ process_rankings() {
 		case "$metric" in cpu) key=2 ;; memory) key=3 ;; esac
 		json_add_array "top_$metric"
 		if [ -n "$scratch" ]; then
-			LC_ALL=C sort -t '|' -k "$key,${key}nr" "$scratch/processes" |
-				awk -F '|' -v key="$key" '$key > 0 { print; if (++count == 8) exit }' > "$scratch/top"
+			awk -F '|' -v key="$key" '$key > 0 { print $key "|" $0 }' "$scratch/processes" |
+				LC_ALL=C sort -nr | head -n 8 | cut -d '|' -f 2- > "$scratch/top"
 			while IFS='|' read -r pid cpu rss name; do
 				json_add_object ''
 				json_add_int pid "$pid"

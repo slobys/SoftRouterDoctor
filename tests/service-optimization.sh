@@ -70,6 +70,9 @@ test "${#token}" -eq 64
 expect "$(value '@.services[@.id="samba4"].enabled')" true
 expect "$(value '@.services[@.id="samba4"].running')" true
 test -n "$(value '@.top_memory[0].name')"
+for expression in '@.top_cpu[*].cpu_percent' '@.top_memory[*].rss_kib'; do
+	value "$expression" | awk 'NR > 1 && ($1+0) > last { unsorted=1 } { last=$1+0 } END { exit unsorted }'
+done
 test -n "$(value '@.startups[*]' | grep -x dnsmasq)"
 
 report=$(sh "$work/doctor" optimize-service dnsmasq "$token" true true)
