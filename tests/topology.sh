@@ -9,7 +9,8 @@ export SRD_TOPOLOGY_FIXTURE="$fixture"
 mkdir "$fixture/bin"
 
 sed -e "s|^PATH=|PATH=$fixture/bin:|" \
-	-e "s|^LEASE_FILE=.*|LEASE_FILE=$fixture/leases|" "$root/payload/doctor" > "$fixture/doctor"
+	-e "s|^LEASE_FILE=.*|LEASE_FILE=$fixture/leases|" \
+	-e "s|^CLIENT_PATH_REPORT=.*|CLIENT_PATH_REPORT=$fixture/no-client-report|" "$root/payload/doctor" > "$fixture/doctor"
 
 cat > "$fixture/bin/mock" <<'MOCK'
 #!/bin/sh

@@ -16,7 +16,7 @@
     "description": "View local network topology and observed device addresses.",
     "read": {
       "ubus": {
-        "soft-router-doctor": ["networkMap"]
+        "soft-router-doctor": ["networkMap", "discoverRouters"]
       }
     }
   }

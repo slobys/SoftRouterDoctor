@@ -13,13 +13,14 @@ INIT_DIR=/etc/init.d
 RC_DIR=/etc/rc.d
 OPTIMIZE_LOCK=/var/lock/soft-router-doctor-optimization
 LEASE_FILE=/tmp/dhcp.leases
+CLIENT_PATH_REPORT=/tmp/soft-router-doctor-client-path.json
 
 field() {
 	printf '%s\n' "$1" | jsonfilter -e "$2" 2>/dev/null
 }
 
 identity() {
-	json_add_string version '0.5.0-dev'
+	json_add_string version '0.6.0-dev'
 	IFS= read -r revision 2>/dev/null < "$REVISION_FILE" || revision=uninstalled
 	json_add_string revision "$revision"
 }
@@ -920,6 +921,263 @@ EOF
 	json_close_object
 }
 
+read_bridge_clients() {
+	local bridge="$1" root="$2" p num
+	shift 2
+	: > "$root/fdb"
+	command -v brctl >/dev/null 2>&1 && [ -d "/sys/class/net/$bridge/bridge" ] || return 0
+	{
+		for p in "$@"; do
+			valid_interface_name "$p" || continue
+			num=$(cat "/sys/class/net/$bridge/brif/$p/port_no" 2>/dev/null)
+			case "$num" in 0x*) case "${num#0x}" in ''|*[!0-9a-fA-F]*) continue ;; esac ;; *) continue ;; esac
+			printf '%d %s\n' "$((num))" "$p"
+		done
+	} > "$root/port_numbers"
+	timeout 3 brctl showmacs "$bridge" 2>/dev/null | awk '
+		FILENAME == ARGV[1] { port[$1] = $2; next }
+		$3 == "no" && ($1 in port) {
+			mac = tolower($2)
+			if ((mac in last) && last[mac] != port[$1]) ambiguous[mac] = 1
+			last[mac] = port[$1]
+		}
+		END { for (mac in last) if (!ambiguous[mac]) print mac, last[mac] }
+	' "$root/port_numbers" - > "$root/fdb"
+}
+
+add_lldp_neighbors() {
+	local port label
+	json_add_array lldp
+	if command -v lldpcli >/dev/null 2>&1; then
+		timeout 3 lldpcli -f keyvalue show neighbors details 2>/dev/null |
+			awk '/^lldp\.[^=]+\.chassis\.name=/ {
+				port = $0
+				sub(/^lldp\./, "", port)
+				sub(/\.chassis\.name=.*/, "", port)
+				name = $0
+				sub(/^[^=]*=/, "", name)
+				gsub(/\|/, "", name)
+				if (port ~ /^[-A-Za-z0-9_:.@]+$/ && name != "") print port "|" substr(name,1,100)
+			}' | LC_ALL=C sort -u > "$root/lldp"
+		while IFS='|' read -r port label; do
+			json_add_object ''
+			json_add_string port "$port"
+			json_add_string name "$label"
+			json_close_object
+		done < "$root/lldp"
+	fi
+	json_close_array
+}
+
+observe_lldp_port() {
+	local port="$1"
+	LC_ALL=C timeout 23 tcpdump -p -i "$port" -enn -tt -vv -l -c 8 -s 512 \
+		'ether proto 0x88cc and ether dst 01:80:c2:00:00:0e' 2>/dev/null |
+		awk -v port="$port" '
+		function output() {
+			if (mac != "" && (name != "" || address != "" || capabilities != ""))
+				print port "|" name "|" address "|" capabilities "|" mac "|" advertised_port
+		}
+		/ethertype LLDP/ {
+			output()
+			mac = tolower($2)
+			if (mac !~ /^([0-9a-f][0-9a-f]:){5}[0-9a-f][0-9a-f]$/) mac = ""
+			name = address = capabilities = advertised_port = ""
+		}
+		/System Name TLV/ {
+			name = $0
+			sub(/^.*length [0-9]+:[[:space:]]*/, "", name)
+			sub(/M-.*/, "", name)
+			gsub(/[|[:cntrl:]]/, "", name)
+			name = substr(name,1,100)
+		}
+		/Port Description TLV/ {
+			advertised_port = $0
+			sub(/^.*length [0-9]+:[[:space:]]*/, "", advertised_port)
+			gsub(/[|[:cntrl:]]/, "", advertised_port)
+			advertised_port = substr(advertised_port,1,64)
+		}
+		/AFI IPv4 \(1\):/ && address == "" {
+			line = $0
+			sub(/^.*AFI IPv4 \(1\):[[:space:]]*/, "", line)
+			if (line ~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/) address = line
+		}
+		/Enabled Capabilities \[/ {
+			capabilities = $0
+			sub(/^.*Enabled Capabilities \[/, "", capabilities)
+			sub(/\].*$/, "", capabilities)
+			gsub(/[|[:cntrl:]]/, "", capabilities)
+			capabilities = substr(capabilities,1,100)
+		}
+		END { output() }'
+}
+
+add_client_path() {
+	local report id key hop i item
+	[ -f "$CLIENT_PATH_REPORT" ] && [ ! -L "$CLIENT_PATH_REPORT" ] &&
+		[ "$(stat -c %u "$CLIENT_PATH_REPORT" 2>/dev/null)" = 0 ] || return 0
+	report=$(head -c 8192 "$CLIENT_PATH_REPORT" 2>/dev/null)
+	id=$(field "$report" '@.schema')
+	[ "$id" = srd-windows-path-1 ] || return 0
+	json_add_object client_path
+	json_add_string schema "$id"
+	for key in captured_at source_ipv4 gateway first_hop mac adapter; do
+		json_add_string "$key" "$(field "$report" "@.$key")"
+	done
+	json_add_array hops
+	for hop in $(field "$report" '@.hops[*]'); do
+		json_add_string '' "$hop"
+	done
+	json_close_array
+	json_add_array link_neighbors
+	for i in 0 1 2 3 4 5; do
+		item=$(field "$report" "@.link_neighbors[$i]")
+		[ -n "$item" ] || break
+		json_add_object ''
+		for key in mac name address capabilities advertised_port; do
+			json_add_string "$key" "$(field "$item" "@.$key")"
+		done
+		json_close_object
+	done
+	json_close_array
+	json_close_object
+}
+
+configured_wan_nat() {
+	local section members
+	for section in $(uci -q show firewall | sed -n "s/^\(firewall\..*\)\.name='wan'$/\1/p"); do
+		members=" $(uci -q get "$section.network") "
+		case "$members" in
+			*" wan "*) uci -q get "$section.masq"; return ;;
+		esac
+	done
+}
+
+# Only the directly attached private main LAN is considered for active discovery.
+private_lan_targets() {
+	awk -v ip="$1" -v bits="$2" 'BEGIN {
+		if (split(ip,x,"\\.")!=4 || bits !~ /^[0-9]+$/ || bits < 24 || bits > 30) exit
+		for (i=1;i<=4;i++) {
+			if (x[i] !~ /^[0-9]+$/ || x[i] > 255) exit
+			number=256*number+x[i]
+		}
+		if (!(x[1]==10 || (x[1]==172 && x[2]>=16 && x[2]<=31) || (x[1]==192 && x[2]==168))) exit
+		block=2^(32-bits); base=int(x[4]/block)*block
+		for (i=base+1;i<base+block-1;i++)
+			if (i!=x[4]) printf "%d.%d.%d.%d\n", x[1],x[2],x[3],i
+	}'
+}
+
+router_title() {
+	command -v curl >/dev/null 2>&1 || return 1
+	LC_ALL=C curl -q -4 -s --noproxy '*' --interface "$2" --proto '=http' --connect-timeout 1 \
+		--max-time 2 "http://$1/" 2>/dev/null | head -c 24576 |
+		tr '\r\n\t' ' ' | grep -Eio '<title[^>]*>[^<]*' | head -n 1 |
+		sed 's/^[^>]*>//; s/[|]//g' | grep -Ei 'router|路由|openwrt|istoreos|mesh|gateway' | cut -c 1-100
+}
+
+discover_routers() (
+	root=$(mktemp -d /tmp/soft-router-doctor-discovery.XXXXXX) || {
+		repair_result unavailable '本机无法开始设备识别。'; exit
+	}
+	trap 'rm -rf "$root"' EXIT
+	trap 'exit 1' HUP INT TERM
+	lan=$(ubus -S call network.interface.lan status 2>/dev/null)
+	device=$(field "$lan" '@.l3_device')
+	case "$device" in ''|*[!A-Za-z0-9_.:@-]*|-*)
+		repair_result unavailable '暂未识别到标准 LAN 接口。'; exit ;;
+	esac
+	address=$(field "$lan" '@["ipv4-address"][0].address')
+	mask=$(field "$lan" '@["ipv4-address"][0].mask')
+	lldp_ports=0
+	if command -v tcpdump >/dev/null 2>&1; then
+		ports=$(field "$(if_device_status "$device")" '@["bridge-members"][*]')
+		for port in ${ports:-$device}; do
+			valid_interface_name "$port" || continue
+			[ "$(field "$(if_device_status "$port")" '@.carrier')" = true ] || continue
+			lldp_ports=$((lldp_ports + 1))
+			observe_lldp_port "$port" > "$root/lldp.$lldp_ports" &
+			[ "$lldp_ports" -lt 4 ] || break
+		done
+	fi
+	: > "$root/targets"
+	if [ "$1" != '--listen-only' ]; then
+		private_lan_targets "$address" "$mask" > "$root/targets"
+	fi
+	count=$(awk 'END { print NR + 0 }' "$root/targets")
+	(
+		index=0
+		while IFS= read -r target; do
+			timeout 2 ping -4 -I "$device" -c 1 -W 1 "$target" >/dev/null 2>&1 &
+			index=$((index + 1))
+			[ $((index % 32)) -ne 0 ] || wait
+		done < "$root/targets"
+		wait
+	)
+
+	: > "$root/fdb"
+	collect_lan_clients "$device" "$address" "$mask" "$root"
+	awk -F '|' '
+		FILENAME == ARGV[1] { targets[$1] = 1; next }
+		($2 in targets) && $1 != "unresolved" {
+			priority = tolower($4) ~ /(router|openwrt|istoreos|routeros|miwifi)/ ? 0 : 1
+			print priority "|" $2 "|" $4
+		}' "$root/targets" "$root/clients" | LC_ALL=C sort | head -n 48 > "$root/candidates"
+	candidate_count=$(awk 'END { print NR + 0 }' "$root/candidates")
+	(
+		index=0
+		while IFS='|' read -r priority target hostname; do
+			index=$((index + 1))
+			(
+				title=$(router_title "$target" "$device")
+				if [ -n "$title" ] || [ "$priority" -eq 0 ]; then
+					printf '%s|%s|%s\n' "$target" "$hostname" "$title"
+				fi
+			) > "$root/device.$index" &
+			[ $((index % 16)) -ne 0 ] || wait
+		done < "$root/candidates"
+		wait
+	)
+	wait
+
+	json_init
+	json_add_int hosts_probed "$count"
+	json_add_int candidates "$candidate_count"
+	json_add_int lldp_ports "$lldp_ports"
+	json_add_array lldp
+	if [ "$lldp_ports" -gt 0 ]; then
+		LC_ALL=C sort -u "$root"/lldp.* > "$root/observations"
+		while IFS='|' read -r port name management capabilities mac advertised_port; do
+			json_add_object ''
+			json_add_string port "$port"
+			json_add_string name "$name"
+			json_add_string address "$management"
+			json_add_string capabilities "$capabilities"
+			json_add_string mac "$mac"
+			json_add_string advertised_port "$advertised_port"
+			json_close_object
+		done < "$root/observations"
+	fi
+	json_close_array
+	if command -v curl >/dev/null 2>&1; then
+		json_add_int pages_checked "$candidate_count"
+	else
+		json_add_int pages_checked 0
+	fi
+	json_add_array routers
+	for file in "$root"/device.*; do
+		[ -s "$file" ] || continue
+		IFS='|' read -r target hostname title < "$file"
+		json_add_object ''
+		json_add_string address "$target"
+		json_add_string host "$hostname"
+		json_add_string title "$title"
+		json_close_object
+	done
+	json_close_array
+	json_dump
+)
+
 collect_lan_clients() {
 	local device="$1" address="$2" mask="$3" root="$4" leases
 	leases=$LEASE_FILE
@@ -954,9 +1212,9 @@ collect_lan_clients() {
 		host[mac] = $4 == "*" ? "" : $4
 		gsub(/\|/, "", host[mac])
 		leaseip[$3] = mac
-		leased[mac] = 1
 		next
 	}
+	FILENAME == ARGV[2] { learned[$1] = $2; next }
 	{
 		address = $1; state = $NF; mac = ""
 		for (i = 2; i < NF; i++) if ($i == "lladdr") mac = tolower($(i+1))
@@ -978,13 +1236,13 @@ collect_lan_clients() {
 			else if (observed[mac]) { state = "known"; priority = 2 }
 			else if (unresolved[mac]) { state = "unresolved"; priority = 0 }
 			else { state = "lease"; priority = 3 }
-			printf "%d|%s|%s|%s|%s|%s\n", priority,state,ip4[mac],ip6[mac],substr(host[mac],1,64),substr(mac,13)
+			printf "%d|%s|%s|%s|%s|%s|%s|%s\n", priority,state,ip4[mac],ip6[mac],substr(host[mac],1,64),substr(mac,13),learned[mac],mac
 		}
-	}' "$leases" "$root/neighbors" | LC_ALL=C sort | cut -d '|' -f 2- > "$root/clients"
+	}' "$leases" "$root/fdb" "$root/neighbors" | LC_ALL=C sort | cut -d '|' -f 2- > "$root/clients"
 }
 
 add_lan_segment() {
-	local name="$1" root="$2" if_data device dev_data address mask port state host addr4 addr6 tail
+	local name="$1" root="$2" if_data device dev_data address mask port state host addr4 addr6 tail learned mac ports
 	if_data=$(ubus -S call "network.interface.$name" status 2>/dev/null) || return 0
 	device=$(field "$if_data" '@.l3_device')
 	[ -n "$device" ] || device=$(field "$if_data" '@.device')
@@ -1003,7 +1261,8 @@ add_lan_segment() {
 	json_add_string carrier "$(field "$dev_data" '@.carrier')"
 	json_add_string gateway "${address:+$address/$mask}"
 	json_add_array ports
-	for port in $(field "$dev_data" '@["bridge-members"][*]'); do
+	ports=$(field "$dev_data" '@["bridge-members"][*]')
+	for port in $ports; do
 		valid_interface_name "$port" || continue
 		json_add_object ''
 		json_add_string name "$port"
@@ -1013,17 +1272,22 @@ add_lan_segment() {
 	json_close_array
 
 	: > "$root/clients"
-	if [ -n "$device" ]; then collect_lan_clients "$device" "$address" "$mask" "$root"; fi
+	if [ -n "$device" ]; then
+		read_bridge_clients "$device" "$root" $ports
+		collect_lan_clients "$device" "$address" "$mask" "$root"
+	fi
 	json_add_int client_count "$(awk 'END{print NR + 0}' "$root/clients")"
 	json_add_array clients
 	head -n 48 "$root/clients" > "$root/visible"
-	while IFS='|' read -r state addr4 addr6 host tail; do
+	while IFS='|' read -r state addr4 addr6 host tail learned mac; do
 		json_add_object ''
 		json_add_string state "$state"
 		json_add_string address "$addr4"
 		json_add_string ipv6 "$addr6"
 		json_add_string host "$host"
 		json_add_string mac_tail "$tail"
+		json_add_string learned_port "$learned"
+		json_add_string mac "$mac"
 		json_close_object
 	done < "$root/visible"
 	json_close_array
@@ -1046,6 +1310,11 @@ network_map() (
 	json_add_string wan_device "$wan_device"
 	json_add_string wan_l3 "$(field "$wan" '@.l3_device')"
 	json_add_string wan_protocol "$(field "$wan" '@.proto')"
+	json_add_string wan_up "$(field "$wan" '@.up')"
+	json_add_string forwarding "$(cat /proc/sys/net/ipv4/ip_forward 2>/dev/null)"
+	json_add_string wan_nat "$(configured_wan_nat)"
+	add_lldp_neighbors
+	add_client_path
 	json_add_string wan_carrier "$(field "$(if_device_status "$wan_device")" '@.carrier')"
 	json_add_array outlets
 	route_outlet 4
@@ -1085,8 +1354,9 @@ fi
 case "$*" in
 	scan) scan online ;;
 	topology) network_map ;;
+	discover-routers|'discover-routers --listen-only') discover_routers "$2" ;;
 	'scan --local') scan local ;;
 	status) json_init; identity; json_dump ;;
 	'fix-dns --confirm') repair_dns ;;
-	*) echo 'Usage: soft-router-doctor {scan [--local]|topology|status|fix-dns --confirm|accelerate [--apply TOKEN]}' >&2; exit 2 ;;
+	*) echo 'Usage: soft-router-doctor {scan [--local]|topology|discover-routers|status|fix-dns --confirm|accelerate [--apply TOKEN]}' >&2; exit 2 ;;
 esac

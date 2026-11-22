@@ -1,10 +1,21 @@
 'use strict';
 'require view';
 'require rpc';
+'require request';
 'require ui';
 'require dom';
 
 const networkMap = rpc.declare({ object: 'soft-router-doctor', method: 'networkMap', reject: true });
+async function discoverRouters(listenOnly = false) {
+	const response = await request.post(rpc.getBaseURL(), {
+		jsonrpc: '2.0', id: 1, method: 'call',
+		params: [rpc.getSessionID(), 'soft-router-doctor', 'discoverRouters', { listenOnly }]
+	}, { timeout: 28000, credentials: true, nobatch: true });
+	const message = response.json();
+	if (!response.ok || message.jsonrpc !== '2.0' || message.result?.[0] !== 0)
+		throw new Error('router discovery RPC failed');
+	return message.result[1];
+}
 const scan = rpc.declare({ object: 'soft-router-doctor', method: 'scan', reject: true });
 const scanLocal = rpc.declare({ object: 'soft-router-doctor', method: 'scanLocal', reject: true });
 const repairDns = rpc.declare({
@@ -98,6 +109,8 @@ const styles = [
 	'.srd-map-path{display:grid;grid-template-columns:minmax(0,.93fr) 24px minmax(0,.83fr) 24px minmax(0,1.27fr);align-items:start;margin:9px 0 12px}.srd-map-node{min-width:0;border:1px solid var(--line);border-radius:12px;background:var(--quiet);padding:12px;overflow-wrap:anywhere}.srd-map-node[data-state="warning"]{border-color:var(--warn)}.srd-map-node[data-state="failed"]{border-color:var(--bad)}',
 	'.srd-map-heading{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 7px;margin:0 0 4px}.srd-root .srd-map-heading .srd-rank-title{margin:0}.srd-map-link{height:1px;margin-top:24px;background:var(--accent);opacity:.65}.srd-map-segments{display:grid;gap:9px}.srd-map-meta{display:block;color:var(--muted);font-size:.8rem}.srd-map-node .srd-map-meta{margin-top:3px}',
 	'.srd-map-outlets{display:grid;gap:4px;margin:6px 0}.srd-map-outlets>div{display:grid;grid-template-columns:auto minmax(0,1fr);gap:7px;font-size:.82rem}.srd-map-outlets dt{font-weight:700}.srd-map-outlets dd{margin:0;color:var(--muted)}',
+	'.srd-path-evidence{margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}.srd-path-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:6px 0}.srd-root .srd-path-fact{font-size:.92rem;margin-top:8px}.srd-path-devices{list-style:none;padding:0;margin:4px 0 0}.srd-path-devices li{padding:8px 0;border-top:1px solid var(--line);overflow-wrap:anywhere}.srd-path-actions a{color:var(--accent);font-size:.82rem}',
+	'.srd-root .srd-pc-path{display:flex;flex-wrap:wrap;gap:8px;list-style:none;margin:10px 0;padding:0}.srd-pc-path li{display:grid;align-content:start;gap:3px;flex:1 1 136px;min-width:0;padding:8px 10px;border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:7px;background:var(--quiet);overflow-wrap:anywhere}.srd-pc-path li[data-state=unknown]{border-style:dashed;border-left-width:1px}.srd-pc-path strong{font-size:.84rem;color:var(--ink)}.srd-pc-path li span{font-size:.77rem;color:var(--muted)}',
 	'.srd-map-clients{margin:0;padding:0;list-style:none}.srd-map-clients li{display:flex;align-items:baseline;justify-content:space-between;gap:6px;padding:6px 0;border-top:1px solid var(--line)}.srd-map-clients li>div{min-width:0}.srd-map-clients strong{font-size:.87rem}',
 	'@media(max-width:960px){.srd-map-path{grid-template-columns:minmax(0,1fr)}.srd-map-link{height:14px;width:1px;margin:0 23px}.srd-map-node,.srd-map-segments{width:100%}}',
 	'@media(max-width:560px){.srd-accel{padding:12px}.srd-accel-stat{padding:8px}.srd-accel-stat dt{font-size:.73rem}.srd-accel-stat dd{font-size:.92rem}.srd-ranks{grid-template-columns:1fr}.srd-service-toggle{font-size:.85rem}}',
@@ -419,7 +432,8 @@ function renderMapSegment(segment, prefixCheck, open) {
 				const address = client.address || client.ipv6;
 				return E('li', {}, [
 					E('div', {}, [text('strong', client.host || address || '未知设备'),
-						text('span', client.host && address ? address : 'MAC 尾号 ' + client.mac_tail, 'srd-map-meta')]),
+						text('span', [client.host && address ? address : 'MAC 尾号 ' + client.mac_tail,
+							client.learned_port ? '从 ' + client.learned_port + ' 方向学到' : ''].filter(Boolean).join(' · '), 'srd-map-meta')]),
 					chip(tone, label)
 				]);
 			})),
@@ -466,6 +480,128 @@ function renderNetworkMap(map, report, checking, expanded = new Set()) {
 			report ? '设备来自本机邻居表与 DHCP 租约。AP 或交换机之后的物理连接需要从对应设备确认。' :
 				'本轮公网检查未返回，图中保留了路由器已读取的结构。')
 	];
+}
+
+function pathClient(value) {
+	const address = input => typeof input === 'string' && /^(?:\d{1,3}\.){3}\d{1,3}$/.test(input) &&
+		input.split('.').every(part => Number(part) <= 255);
+	const mac = input => typeof input === 'string' && /^(?:[a-f0-9]{2}:){5}[a-f0-9]{2}$/i.test(input) ?
+		input.toLowerCase() : '';
+	const label = (input, length) => typeof input === 'string' ? input.slice(0, length) : '';
+	if (value?.schema !== 'srd-windows-path-1' || !address(value.source_ipv4) ||
+		typeof value.captured_at !== 'string' || !Number.isFinite(Date.parse(value.captured_at)))
+		return null;
+	return {
+		captured_at: value.captured_at, source_ipv4: value.source_ipv4,
+		gateway: address(value.gateway) ? value.gateway : '',
+		first_hop: address(value.first_hop) ? value.first_hop : '',
+		adapter: label(value.adapter, 64),
+		mac: mac(value.mac),
+		hops: Array.isArray(value.hops) ? value.hops.filter(address).slice(0, 5) : [],
+		link_neighbors: Array.isArray(value.link_neighbors) ? value.link_neighbors.slice(0, 6)
+			.filter(item => mac(item?.mac)).map(item => ({
+				mac: mac(item.mac), name: label(item.name, 100),
+				address: address(item.address) ? item.address : '',
+				capabilities: label(item.capabilities, 100),
+				advertised_port: label(item.advertised_port, 64)
+			})) : []
+	};
+}
+
+function lldpLabel(item) {
+	return [item.name, item.address].filter(Boolean).join(' · ') || item.mac;
+}
+
+function lldpDescription(item) {
+	const flags = (item.capabilities || '').split(',').map(flag => flag.trim());
+	if (flags.includes('Router') && flags.includes('WLAN AP')) return 'LLDP 宣告已启用路由与 WLAN AP';
+	if (flags.includes('Router')) return 'LLDP 宣告已启用路由';
+	if (flags.includes('WLAN AP')) return 'LLDP 宣告已启用 WLAN AP';
+	if (flags.includes('Bridge')) return 'LLDP 宣告已启用桥接';
+	return '工作模式待核实';
+}
+
+function pathDiagram(path, computer, routerNeighbors) {
+	const lan = routerNeighbors.filter(item => computer?.learned_port && item.port === computer.learned_port);
+	const routerSide = lan.length === 1 && lan[0].mac ? lan[0] : null;
+	const pcSide = path.link_neighbors.length === 1 ? path.link_neighbors[0] : null;
+	const sameDevice = routerSide && pcSide && routerSide.mac === pcSide.mac;
+	const steps = [E('li', {}, [text('strong', '软路由 ' + path.first_hop),
+		text('span', computer?.learned_port ? '电脑流量从 ' + computer.learned_port + ' 学到' : '电脑的首个 IPv4 跳点')])];
+	if (routerSide) steps.push(E('li', {}, [text('strong', lldpLabel(routerSide)),
+		text('span', sameDevice ? '两端收到同一设备的通告' : '软路由侧收到 LLDP')]));
+	if (!sameDevice) {
+		steps.push(E('li', { 'data-state': 'unknown' }, [text('strong', '中间接线待确认'),
+			text('span', '两端证据无法核实这段直连关系')]));
+		if (pcSide) steps.push(E('li', {}, [text('strong', lldpLabel(pcSide)), text('span', '电脑侧收到 LLDP')]));
+	}
+	steps.push(E('li', {}, [text('strong', '电脑 ' + path.source_ipv4), text('span', path.adapter || '采样终端')]));
+	return E('ol', { 'class': 'srd-pc-path', 'aria-label': '从软路由到电脑的观测路径' }, steps);
+}
+
+function renderPathEvidence(map, pc, discovery) {
+	const path = pc || pathClient(map?.client_path);
+	const hosts = (map?.segments || []).flatMap(segment => segment.clients);
+	const computer = path?.mac && hosts.find(item => item.mac === path.mac && item.address === path.source_ipv4);
+	const lanIps = (map?.segments || []).map(segment => segment.gateway.split('/')[0]).filter(Boolean);
+	const firstIsLocal = path?.first_hop && lanIps.includes(path.first_hop);
+	const sharedGateway = path?.gateway && lanIps.includes(path.gateway);
+	const captured = discovery?.lldp || [];
+	const routerNeighbors = captured.concat((map?.lldp || []).filter(item =>
+		!captured.some(neighbor => neighbor.port === item.port &&
+			neighbor.name && (item.name === neighbor.name || item.name.startsWith(neighbor.name)))));
+
+	const deviceEvidence = [];
+	if (map?.wan_up === 'true' && map.wan_protocol === 'pppoe') deviceEvidence.push('WAN 正在 PPPoE 拨号');
+	if (map?.forwarding === '1') deviceEvidence.push('IPv4 转发已启用');
+	if (map?.wan_nat === '1') deviceEvidence.push('WAN 配置了源地址转换');
+
+	const nodes = [];
+	if (deviceEvidence.length)
+		nodes.push(text('p', '本机配置：' + deviceEvidence.join(' · ') + '。', 'srd-path-fact'));
+	if (path) {
+		nodes.push(text('p', '电脑采样：' + [path.adapter, path.source_ipv4,
+			path.gateway ? '网关 ' + path.gateway : '', path.first_hop ? '首个 IPv4 跳点 ' + path.first_hop : '第一跳未应答'
+		].filter(Boolean).join(' · '), 'srd-path-fact'));
+		if (firstIsLocal && sharedGateway) {
+			nodes.push(pathDiagram(path, computer, routerNeighbors));
+			nodes.push(text('p', '本机路由器是这台电脑的第一个 IPv4 转发跳点。' +
+				(computer?.learned_port ? '路由器从 ' + computer.learned_port + ' 学到了电脑的 MAC，可确认这段二层路径。' : '') +
+				'同一二层路径中的 AP、桥接设备或交换机本身不会成为路由跳点。', 'srd-map-meta'));
+		} else if (path.first_hop) {
+			nodes.push(text('p', '该电脑的第一跳与本机 LAN 地址不同。结合已识别设备地址核对是否还有一层路由。', 'srd-map-meta'));
+		}
+		nodes.push(text('p', '电脑报告采样时间 ' + new Date(path.captured_at).toLocaleString('zh-CN'), 'srd-map-meta'));
+	}
+	const pcNeighbors = path?.link_neighbors || [];
+	if (routerNeighbors.length || pcNeighbors.length) {
+		nodes.push(text('p', '设备的 LLDP 通告', 'srd-path-fact'));
+		const rows = routerNeighbors.map(item => ({ item, source: '软路由端口 ' + item.port }));
+		for (const item of pcNeighbors) rows.push({ item, source: '电脑网口 ' + path.adapter });
+		nodes.push(E('ul', { 'class': 'srd-path-devices' }, rows.map(({ item, source }) =>
+			E('li', {}, [text('strong', lldpLabel(item)),
+				text('span', [source, item.advertised_port && '对端公布端口 ' + item.advertised_port,
+					lldpDescription(item)].filter(Boolean).join(' · '), 'srd-map-meta')]))));
+	}
+	if (discovery) {
+		nodes.push(text('p', '探测 ' + discovery.hosts_probed + ' 个本地地址，读取 ' + discovery.pages_checked +
+			' 个候选设备的 HTTP 首页，监听 ' + (discovery.lldp_ports || 0) + ' 个 LAN 端口的 LLDP。', 'srd-map-meta'));
+		const otherRouters = discovery.routers.filter(device => !captured.concat(pcNeighbors)
+			.some(item => item.address && item.address === device.address));
+		if (!otherRouters.length && !routerNeighbors.length && !pcNeighbors.length)
+			nodes.push(text('p', '本轮未发现公布路由器特征的设备。', 'srd-map-meta'));
+		if (otherRouters.length) nodes.push(E('ul', { 'class': 'srd-path-devices' }, otherRouters.map(device => {
+			const identity = [device.host, device.title].filter((part, i, parts) => part && parts.indexOf(part) === i).join(' · ');
+			const neighbor = hosts.find(item => item.address === device.address);
+			const details = [device.address, device.title ? '从管理页识别' : 'DHCP 自报名',
+				neighbor?.learned_port ? '从 ' + neighbor.learned_port + ' 方向学到' : '',
+				path?.hops.includes(device.address) ? '出现在电脑的 IPv4 路由路径中' : '工作模式和接线位置待核实'
+			];
+			return E('li', {}, [text('strong', identity || device.address),
+				text('span', details.filter(Boolean).join(' · '), 'srd-map-meta')]);
+		})));
+	}
+	return nodes;
 }
 
 function stageItems(states) {
@@ -526,6 +662,31 @@ return view.extend({
 		]);
 
 		const mapContent = E('div');
+		let latestMap = null;
+		let topologyHealth = null;
+		let discovery = null;
+		let computerPath = null;
+		const pathStatus = E('p', { 'class': 'srd-map-meta', 'role': 'status' });
+		const pathEvidence = E('div');
+		const discoverButton = button('自动发现路由设备', runDiscovery);
+		const pathFile = E('input', {
+			'type': 'file', 'accept': 'application/json,.json', 'hidden': true,
+			'change': async event => {
+				const file = event.target.files?.[0];
+				try {
+					if (!file || file.size > 8192) throw new Error('invalid path report');
+					const parsed = pathClient(JSON.parse((await file.text()).replace(/^\uFEFF/, '')));
+					if (!parsed) throw new Error('invalid path report');
+					computerPath = parsed;
+					pathStatus.textContent = '已读取电脑检测报告。';
+					updatePathEvidence();
+				} catch {
+					pathStatus.textContent = '文件无法读取。请选择 Windows 检测脚本生成的 JSON。';
+				} finally {
+					event.target.value = '';
+				}
+			}
+		});
 		const mapPanel = E('section', { 'class': 'srd-accel', 'id': 'srd-network-map',
 			'aria-labelledby': 'srd-network-map-title', 'hidden': true }, [
 			E('div', { 'class': 'srd-accel-top' }, [
@@ -536,8 +697,51 @@ return view.extend({
 					mapButton.focus();
 				})
 			]),
-			mapContent
+			mapContent,
+			E('section', { 'class': 'srd-path-evidence' }, [
+				text('h4', '接线与工作模式证据', 'srd-rank-title'),
+				E('div', { 'class': 'srd-path-actions' }, [discoverButton,
+					button('导入电脑检测报告', () => pathFile.click()), pathFile,
+					E('a', { 'href': 'https://github.com/slobys/SoftRouterDoctor/blob/codex/preview/tools/windows-path.ps1',
+						'target': '_blank', 'rel': 'noopener noreferrer' }, 'Windows 检测脚本')]),
+				pathStatus, pathEvidence
+			])
 		]);
+
+		function updatePathEvidence() {
+			dom.content(pathEvidence, renderPathEvidence(latestMap, computerPath, discovery));
+		}
+
+		async function runDiscovery() {
+			if (busy || accelerating || mapping) return;
+			mapping = true;
+			pathStatus.textContent = '正在识别同网段的路由设备并监听邻居通告。';
+			update();
+			try {
+				const next = await discoverRouters();
+				if (!Array.isArray(next?.routers)) throw new Error(next?.detail || 'invalid router discovery');
+				if (next.lldp_ports && !next.lldp?.length) {
+					pathStatus.textContent = '已完成地址探测，正在等待下一轮邻居通告。';
+					const repeat = await discoverRouters(true).catch(() => null);
+					if (repeat?.lldp?.length) next.lldp = repeat.lldp;
+				}
+				discovery = next;
+				const map = await networkMap().catch(() => null);
+				if (Array.isArray(map?.segments) && Array.isArray(map?.outlets)) {
+					latestMap = map;
+					const expanded = new Set([...mapContent.querySelectorAll('details[open]')].map(item => item.dataset.segment));
+					dom.content(mapContent, renderNetworkMap(map, topologyHealth, false, expanded));
+				}
+				pathStatus.textContent = '自动发现已完成。';
+				updatePathEvidence();
+			} catch (error) {
+				pathStatus.textContent = '本轮设备发现未完成。已有的接口和路由信息仍可查看。';
+				console.error(error);
+			} finally {
+				mapping = false;
+				update();
+			}
+		}
 
 		async function runTopology() {
 			if (busy || accelerating || mapping) return;
@@ -552,10 +756,12 @@ return view.extend({
 				const map = await networkMap();
 				if (!Array.isArray(map?.outlets) || !Array.isArray(map.segments))
 					throw new Error('invalid network map');
+				latestMap = map;
+				updatePathEvidence();
 				dom.content(mapContent, renderNetworkMap(map, null, true));
-				const health = await scan().catch(() => null);
+				topologyHealth = await scan().catch(() => null);
 				const expanded = new Set([...mapContent.querySelectorAll('details[open]')].map(item => item.dataset.segment));
-				dom.content(mapContent, renderNetworkMap(map, health, false, expanded));
+				dom.content(mapContent, renderNetworkMap(map, topologyHealth, false, expanded));
 			}
 			catch (error) {
 				dom.content(mapContent, E('p', { 'role': 'status' }, '无法读取拓扑。请重新登录或核对拓扑查看权限。'));
@@ -641,6 +847,7 @@ return view.extend({
 		function update() {
 			primary.textContent = busy ? (repairInFlight ? '正在修复' : '体检中') : report ? '重新体检' : '开始体检';
 			primary.disabled = local.disabled = speedButton.disabled = mapButton.disabled = busy || accelerating || mapping;
+			discoverButton.disabled = busy || accelerating || mapping;
 			exportButton.disabled = busy || accelerating || mapping || !report;
 			dom.content(steps, stageItems(progress));
 
