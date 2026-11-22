@@ -361,9 +361,12 @@ return view.extend({
 		update();
 		return E('div', { 'class': 'srd-root' }, [
 			E('style', {}, styles),
-			E('header', { 'class': 'srd-hero' }, [
+			// LuCI themes style the shell's header element globally.
+			E('section', { 'class': 'srd-hero', 'aria-labelledby': 'srd-page-title' }, [
 				E('div', { 'class': 'srd-hero-copy' }, [
-					E('div', { 'class': 'srd-hero-intro' }, [ text('h2', '软路由体检', 'srd-title'), summary ]),
+					E('div', { 'class': 'srd-hero-intro' }, [
+						E('h2', { 'class': 'srd-title', 'id': 'srd-page-title' }, '软路由体检'), summary
+					]),
 					E('div', { 'class': 'srd-actions' }, [ primary, local, exportButton ]),
 					meta
 				]),
