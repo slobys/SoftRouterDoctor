@@ -7,59 +7,110 @@
 const scan = rpc.declare({ object: 'soft-router-doctor', method: 'scan', reject: true });
 const scanLocal = rpc.declare({ object: 'soft-router-doctor', method: 'scanLocal', reject: true });
 const repairDns = rpc.declare({
-	object: 'soft-router-doctor',
-	method: 'repairDns',
-	params: [ 'confirm' ],
-	reject: true
+	object: 'soft-router-doctor', method: 'repairDns', params: [ 'confirm' ], reject: true
 });
 
+const groups = [
+	{ id: 'uplink', title: '接入与路由', ids: ['wan_link', 'wan', 'route_v4', 'route_v6'] },
+	{ id: 'dns', title: 'DNS 与站点访问', ids: ['dnsmasq', 'dns', 'https_v4', 'https_v6', 'internet_v4', 'internet_v6'] },
+	{ id: 'ipv6', title: 'IPv6 前缀', ids: ['wan6', 'prefix', 'lan_prefix'] },
+	{ id: 'system', title: '系统资源', ids: ['writable', 'storage', 'memory'] }
+];
+
 const names = {
-	wan_link: 'WAN 链路',
-	wan: 'WAN IPv4 地址',
-	wan6: 'WAN6 IPv6 地址',
-	prefix: 'IPv6 前缀',
-	route_v4: 'IPv4 默认路由',
-	route_v6: 'IPv6 默认路由',
-	dnsmasq: 'dnsmasq 服务',
-	dns: 'DNS 解析',
-	internet_v4: 'IPv4 公网探测',
-	internet_v6: 'IPv6 公网探测',
-	storage: '磁盘空间',
-	memory: '可用内存'
+	wan_link: 'WAN 网口', wan: 'WAN IPv4 地址', wan6: 'WAN6 IPv6 地址',
+	prefix: '上游 IPv6 委派', lan_prefix: 'LAN IPv6 分配',
+	route_v4: 'IPv4 默认路由', route_v6: 'IPv6 默认路由',
+	dnsmasq: 'dnsmasq 服务', dns: '域名解析',
+	https_v4: 'IPv4 HTTPS', https_v6: 'IPv6 HTTPS',
+	internet_v4: 'IPv4 Ping', internet_v6: 'IPv6 Ping',
+	writable: '系统可写层', storage: '可写空间', memory: '可用内存'
 };
 
-const states = {
-	passed: [ '通过', 'label success' ],
-	warning: [ '需核对', 'label warning' ],
-	failed: [ '异常', 'label danger' ],
-	skipped: [ '未验证', 'label' ]
-};
+const labels = { passed: '通过', warning: '需核对', failed: '异常', skipped: '未验证' };
+const phases = [
+	{ title: '接口与系统', detail: '链路、网关与资源' },
+	{ title: '公网与网页', detail: '解析、IPv4 和 IPv6 HTTPS' }
+];
 
-function renderReport(report) {
+// Scoped with the view so older preview installers can also upgrade it in one transaction.
+const styles = [
+	'.srd-root{--ink:#152c3c;--muted:#435e6e;--line:#cbdbe2;--paper:#fff;--wash:#edf5f8;--quiet:#f5f8fa;--subtle:#d6e6ec;--accent:#075873;--accent-hover:#06465d;--accent-ink:#fff;--good:#176149;--warn:#805017;--bad:#a33d24;max-width:1150px;margin:0 auto 30px;font:inherit;color:var(--ink)}',
+	'.srd-root *{box-sizing:border-box}.srd-root ::selection{background:var(--subtle);color:var(--ink)}',
+	'.srd-root h2,.srd-root h3,.srd-root h4,.srd-root p{margin:0}.srd-root p{line-height:1.62}.srd-root [hidden]{display:none!important}',
+	'.srd-hero{display:grid;grid-template-columns:minmax(0,1fr) 190px;gap:28px;align-items:center;padding:28px 32px;background:var(--wash);border:1px solid var(--line);border-radius:16px}',
+	'.srd-root .srd-title{font-size:1.85rem;font-weight:750;letter-spacing:-.03em;line-height:1.2;margin-bottom:8px;color:var(--ink)}',
+	'.srd-root .srd-hero-message{max-width:52ch;color:var(--muted);font-size:1rem}',
+	'.srd-actions{display:flex;flex-wrap:wrap;gap:9px;align-items:center;margin:19px 0 11px}',
+	'.srd-root .srd-button,.srd-root .srd-primary{appearance:none;cursor:pointer;font:inherit;font-weight:650;min-height:44px;padding:8px 15px;border:1px solid var(--line);border-radius:9px;color:var(--ink);background:var(--paper);white-space:normal;text-align:center;transition:background-color .16s ease,color .16s ease,border-color .16s ease}',
+	'.srd-root .srd-button:hover:not(:disabled){background:var(--quiet);border-color:var(--accent)}',
+	'.srd-root .srd-primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}',
+	'.srd-root .srd-primary:hover:not(:disabled){background:var(--accent-hover);border-color:var(--accent-hover)}',
+	'.srd-root button:disabled{opacity:.58;cursor:default}.srd-root :is(button,summary):focus-visible{outline:2px solid var(--accent);outline-offset:3px}',
+	'.srd-root .srd-meta{color:var(--muted);font-size:.82rem;overflow-wrap:anywhere}',
+	'.srd-dial{display:grid;width:156px;height:156px;place-items:center;justify-self:center;position:relative;border-radius:50%;background:conic-gradient(var(--dial,var(--accent)) var(--fill,0%),var(--subtle) 0);color:var(--ink)}',
+	'.srd-dial::before{content:"";position:absolute;inset:9px;border-radius:50%;background:var(--wash)}',
+	'.srd-dial[data-state="good"]{--dial:var(--good)}.srd-dial[data-state="review"]{--dial:var(--warn)}',
+	'.srd-dial-content{position:relative;text-align:center}.srd-dial-value{display:block;font-size:2.05rem;font-weight:750;line-height:1.05;letter-spacing:-.03em;font-variant-numeric:tabular-nums}.srd-dial-label{display:block;margin-top:5px;font-size:.79rem;color:var(--muted);font-weight:650}',
+	'.srd-steps{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 20px;margin:13px 0 0;padding:0;list-style:none}',
+	'.srd-step{display:grid;grid-template-columns:10px minmax(0,1fr) auto;gap:9px;align-items:center;padding:11px 14px;border:1px solid var(--line);border-radius:10px;background:var(--paper)}',
+	'.srd-step-marker{width:8px;height:8px;border-radius:50%;background:var(--subtle)}',
+	'.srd-step[data-state="running"] .srd-step-marker{background:var(--accent);animation:srd-breathe 1.1s ease-in-out infinite alternate}',
+	'.srd-step[data-state="done"] .srd-step-marker{background:var(--good)}.srd-step[data-state="failed"] .srd-step-marker{background:var(--bad)}',
+	'.srd-step-title{display:block;font-size:.94rem;font-weight:700}.srd-step-detail,.srd-step-status{color:var(--muted);font-size:.78rem;line-height:1.3}.srd-step-status{white-space:nowrap}.srd-step-detail{display:block;margin-top:2px}',
+	'@keyframes srd-breathe{from{opacity:.55}to{opacity:1}}',
+	'.srd-notice{background:var(--quiet);border:1px solid var(--line);border-radius:10px;margin-top:14px!important;padding:11px 14px;color:var(--ink)}',
+	'.srd-notice[data-state="error"]{color:var(--bad)}.srd-notice[data-state="success"]{color:var(--good)}',
+	'.srd-results{display:grid;grid-template-columns:minmax(0,1fr) minmax(248px,.43fr);gap:24px;margin-top:24px;align-items:start}',
+	'.srd-root .srd-section-title{font-size:1.17rem;font-weight:750;color:var(--ink);margin-bottom:10px}',
+	'.srd-marks{display:grid;gap:9px}.srd-issue,.srd-empty{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:15px 17px}',
+	'.srd-issue-heading{display:flex;align-items:baseline;gap:8px 11px;flex-wrap:wrap;margin-bottom:6px}.srd-issue-heading h4{color:var(--ink);line-height:1.38;font-size:1.01rem;font-weight:750}',
+	'.srd-issue p,.srd-empty p{color:var(--muted);font-size:.91rem}.srd-empty strong{display:block;color:var(--ink);font-size:.97rem;margin-bottom:3px}',
+	'.srd-chip{padding:3px 7px;border-radius:5px;background:var(--quiet);color:var(--muted);font-size:.73rem;font-weight:700;white-space:nowrap}',
+	'.srd-chip[data-state="failed"]{color:var(--bad)}.srd-chip[data-state="warning"]{color:var(--warn)}.srd-chip[data-state="passed"]{color:var(--good)}',
+	'.srd-root details{margin:0;border:0;background:none}.srd-root .srd-evidence{margin-top:8px}.srd-root summary{color:var(--accent);cursor:pointer;min-height:44px;padding:12px 2px;line-height:20px;font-weight:650}',
+	'.srd-proof{margin:0;padding:0;list-style:none}.srd-proof li{padding:8px 0;border-top:1px solid var(--line)}',
+	'.srd-proof strong{display:block;font-size:.83rem;font-weight:700}.srd-proof span{display:block;color:var(--muted);font-size:.82rem;line-height:1.52}',
+	'.srd-fix{margin-top:4px}.srd-root .srd-fix button{margin:0}',
+	'.srd-overview{border:1px solid var(--line);border-radius:12px;background:var(--paper);overflow:hidden}',
+	'.srd-root .srd-group-link{display:flex;justify-content:space-between;align-items:center;width:100%;min-height:49px;gap:8px;padding:9px 13px;text-align:left;border:0;border-radius:0;background:var(--paper);color:var(--ink);font:inherit;font-weight:650;cursor:pointer}',
+	'.srd-root .srd-group-link:hover{background:var(--quiet)}.srd-root .srd-group-link:focus-visible{outline-offset:-3px}.srd-group-link+.srd-group-link{border-top:1px solid var(--line)}',
+	'.srd-group-count{font-size:.77rem;color:var(--muted);text-align:right;font-variant-numeric:tabular-nums}.srd-root .srd-scope{margin-top:8px;font-size:.8rem;color:var(--muted)}',
+	'.srd-technical{margin-top:22px}.srd-technical details{border-top:1px solid var(--line)}.srd-technical summary{padding-left:3px;color:var(--ink)}',
+	'.srd-row{display:grid;grid-template-columns:minmax(108px,.72fr) max-content minmax(0,2.2fr);align-items:start;gap:9px 12px;padding:8px 4px;border-top:1px solid var(--line)}',
+	'.srd-row strong{font-weight:650}.srd-row p{color:var(--muted);font-size:.85rem;overflow-wrap:anywhere}',
+	'.srd-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}',
+	'@media(prefers-color-scheme:dark){.srd-root{--ink:#e4f1f5;--muted:#adc4cf;--line:#38505b;--paper:#1a2830;--wash:#192f3b;--quiet:#233841;--subtle:#365362;--accent:#8bdeeb;--accent-hover:#a4e8f0;--accent-ink:#10252f;--good:#7ad3ac;--warn:#ffc580;--bad:#ffad95}}',
+	'@media(max-width:820px){.srd-results{grid-template-columns:1fr;gap:18px}.srd-hero{padding:24px;grid-template-columns:minmax(0,1fr) 148px;gap:16px}.srd-dial{width:135px;height:135px}}',
+	'@media(max-width:560px){.srd-hero{grid-template-columns:minmax(0,1fr) auto;padding:18px 15px;gap:12px}.srd-hero-copy{display:contents}.srd-hero-intro{grid-column:1;grid-row:1}.srd-dial{width:89px;height:89px;grid-column:2;grid-row:1}.srd-dial::before{inset:6px}.srd-dial-value{font-size:1.26rem}.srd-dial-label{font-size:.66rem;margin-top:4px}.srd-root .srd-title{font-size:1.38rem;margin-bottom:5px}.srd-root .srd-hero-message{font-size:.85rem;line-height:1.48}.srd-actions,.srd-meta{grid-column:1/-1}.srd-actions{margin:0;gap:6px}.srd-root .srd-button,.srd-root .srd-primary{padding:7px 10px;font-size:.82rem}.srd-steps{gap:7px}.srd-step{grid-template-columns:8px minmax(0,1fr);gap:6px;padding:9px}.srd-step-status{grid-column:2}.srd-step-detail{display:none}.srd-results{margin-top:18px}.srd-row{grid-template-columns:minmax(0,1fr) max-content}.srd-row p{grid-column:1/-1}.srd-issue,.srd-empty{padding:13px}}',
+	'@media(prefers-reduced-motion:reduce){.srd-root *{animation:none!important;transition:none!important}}'
+].join('\n');
+
+function text(tag, value, css) {
+	return E(tag, css ? { 'class': css } : {}, value);
+}
+
+function chip(state, label) {
+	return E('span', { 'class': 'srd-chip', 'data-state': state }, label || labels[state] || labels.skipped);
+}
+
+function button(label, handler, primary) {
+	return E('button', {
+		'type': 'button', 'class': primary ? 'srd-primary' : 'srd-button', 'click': handler
+	}, label);
+}
+
+function countsFor(checks) {
 	const counts = { passed: 0, warning: 0, failed: 0, skipped: 0 };
-	const rows = report.checks.map(item => {
-		const state = states[item.state] || states.skipped;
-		counts[Object.hasOwn(states, item.state) ? item.state : 'skipped']++;
-		return E('div', { 'class': 'tr', 'role': 'row' }, [
-			E('div', { 'class': 'td', 'role': 'cell' }, names[item.id] || item.id),
-			E('div', { 'class': 'td', 'role': 'cell' }, E('span', { 'class': state[1] }, state[0])),
-			E('div', { 'class': 'td', 'role': 'cell' }, item.detail)
-		]);
-	});
-	const countsLine = Object.keys(counts).map(state => counts[state] + ' 项' + states[state][0]).join(' · ');
-	return [
-		E('h3', {}, countsLine),
-		E('p', {}, report.summary || ''),
-		E('p', {}, [ report.model, report.firmware, report.timestamp ].filter(Boolean).join(' · ')),
-		E('div', { 'class': 'table', 'role': 'table', 'aria-label': '检测明细' }, [
-			E('div', { 'class': 'tr table-titles', 'role': 'row' }, [
-				E('div', { 'class': 'th', 'role': 'columnheader' }, '检测项'),
-				E('div', { 'class': 'th', 'role': 'columnheader' }, '状态'),
-				E('div', { 'class': 'th', 'role': 'columnheader' }, '结果与排查建议')
-			]),
-			...rows
-		])
-	];
+	for (const check of checks)
+		counts[Object.hasOwn(counts, check.state) ? check.state : 'skipped']++;
+	return counts;
+}
+
+function subgroups(checks) {
+	return groups.map(group => ({
+		...group, checks: checks.filter(check => group.ids.includes(check.id))
+	})).filter(group => group.checks.length);
 }
 
 function downloadReport(report) {
@@ -73,6 +124,92 @@ function downloadReport(report) {
 	window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+function issueCard(issue, checkById, onRecover) {
+	const severity = issue.level === 'high' ? 'failed' : 'warning';
+	const evidence = (issue.evidence || []).map(id => checkById[id]).filter(Boolean);
+	const elements = [
+		E('div', { 'class': 'srd-issue-heading' }, [
+			chip(severity, severity === 'failed' ? '优先处理' : '建议核对'), text('h4', issue.title)
+		]),
+		text('p', issue.advice)
+	];
+	if (evidence.length) {
+		elements.push(E('details', { 'class': 'srd-evidence' }, [
+			text('summary', '查看依据（' + evidence.length + '）'),
+			E('ul', { 'class': 'srd-proof' }, evidence.map(item => E('li', {}, [
+				text('strong', names[item.id] || item.id), text('span', item.detail)
+			])))
+		]));
+	}
+	if (issue.action === 'start_dnsmasq' && onRecover) {
+		elements.push(E('div', { 'class': 'srd-fix' }, [
+			button('启动并复测 DNS', onRecover, true)
+		]));
+	}
+	return E('article', { 'class': 'srd-issue' }, elements);
+}
+
+function renderReport(report, onRecover) {
+	const checks = report.checks;
+	const findings = report.findings || [];
+	const checkById = Object.fromEntries(checks.map(item => [item.id, item]));
+	const buckets = subgroups(checks);
+	const technical = buckets.map(group => E('details', { 'id': 'srd-detail-' + group.id }, [
+		text('summary', group.title + ' · ' + group.checks.length + ' 项'),
+		...group.checks.map(item => E('div', { 'class': 'srd-row' }, [
+			text('strong', names[item.id] || item.id), chip(item.state), text('p', item.detail)
+		]))
+	]));
+	const groupButtons = buckets.map((group, index) => {
+		const counts = countsFor(group.checks);
+		const verified = group.checks.length - counts.skipped;
+		const status = verified ? counts.passed + '/' + verified + ' 通过' : '未验证';
+		const tail = counts.failed + counts.warning ? ' · ' + (counts.failed + counts.warning) + ' 项需核对' : '';
+		return E('button', {
+			'type': 'button', 'class': 'srd-group-link', 'aria-controls': 'srd-detail-' + group.id,
+			'click': () => {
+				const detail = technical[index];
+				detail.open = true;
+				detail.querySelector('summary').focus();
+			}
+		}, [ text('span', group.title), text('span', status + tail, 'srd-group-count') ]);
+	});
+	const cards = findings.length ? findings.map(issue => issueCard(issue, checkById, onRecover)) : [
+		E('div', { 'class': 'srd-empty' }, [
+			text('strong', '本轮没有发现需处理的明确问题'),
+			text('p', report.mode === 'local' ? '本机检查已完成。选择开始体检可以补做公网探测。' :
+				'如有设备仍无法上网，请到故障设备上复测。下面可以展开查看每项依据。')
+		])
+	];
+	return [
+		E('div', { 'class': 'srd-results' }, [
+			E('section', { 'aria-labelledby': 'srd-findings-title' }, [
+				E('h3', { 'class': 'srd-section-title', 'id': 'srd-findings-title' },
+					findings.length ? '问题与建议 · ' + findings.length : '问题与建议'),
+				E('div', { 'class': 'srd-marks' }, cards)
+			]),
+			E('section', { 'aria-labelledby': 'srd-overview-title' }, [
+				E('h3', { 'class': 'srd-section-title', 'id': 'srd-overview-title' }, '本轮检查'),
+				E('div', { 'class': 'srd-overview' }, groupButtons),
+				text('p', '公网结果来自路由器本机。终端和指定应用的连通性需分别核实。', 'srd-scope')
+			])
+		]),
+		E('section', { 'class': 'srd-technical', 'aria-labelledby': 'srd-technical-title' }, [
+			E('h3', { 'class': 'srd-section-title', 'id': 'srd-technical-title' }, '检查明细'),
+			...technical
+		])
+	];
+}
+
+function stageItems(states) {
+	const status = { ready: '待检查', running: '检查中', done: '完成', skipped: '未运行', failed: '未完成' };
+	return phases.map((phase, index) => E('li', { 'class': 'srd-step', 'data-state': states[index] }, [
+		E('span', { 'class': 'srd-step-marker', 'aria-hidden': 'true' }),
+		E('span', {}, [ text('strong', phase.title, 'srd-step-title'), text('span', phase.detail, 'srd-step-detail') ]),
+		text('span', status[states[index]], 'srd-step-status')
+	]));
+}
+
 return view.extend({
 	handleSave: null,
 	handleSaveApply: null,
@@ -80,59 +217,116 @@ return view.extend({
 
 	render() {
 		let report = null;
-		let running = false;
-		const status = E('p', { 'role': 'status', 'aria-live': 'polite' });
-		const details = E('div', { 'class': 'cbi-section' });
-		const result = E('p', { 'role': 'status', 'aria-live': 'polite' });
-		const fullScan = E('button', {
-			'type': 'button', 'class': 'cbi-button cbi-button-action', 'click': () => runScan(false)
-		}, '一键检测');
-		const localScan = E('button', {
-			'type': 'button', 'class': 'cbi-button', 'click': () => runScan(true)
-		}, '仅检查本机');
-		const exportButton = E('button', {
-			'type': 'button', 'class': 'cbi-button',
-			'click': () => { if (report) downloadReport(report); }
-		}, '下载检测报告');
-		const repairButton = E('button', {
-			'type': 'button', 'class': 'cbi-button cbi-button-action', 'click': showConfirmation
-		}, '启动并复测 dnsmasq');
+		let busy = false;
+		let repairInFlight = false;
+		let progress = ['ready', 'ready'];
+		const live = E('div', { 'class': 'srd-sr', 'role': 'status', 'aria-live': 'polite' });
+		const summary = text('p', '检查网络出口、DNS、网页访问和系统资源。', 'srd-hero-message');
+		const meta = text('p', '公网断开时，仍可选择只查本机。', 'srd-meta');
+		const value = text('strong', '—', 'srd-dial-value');
+		const gaugeLabel = text('span', '待体检', 'srd-dial-label');
+		const dial = E('div', { 'class': 'srd-dial', 'aria-hidden': 'true' }, [
+			E('div', { 'class': 'srd-dial-content' }, [ value, gaugeLabel ])
+		]);
+		const steps = E('ol', { 'class': 'srd-steps', 'aria-label': '体检步骤' }, stageItems(progress));
+		const notice = E('p', { 'class': 'srd-notice', 'role': 'status', 'hidden': true });
+		const results = E('div');
+		const primary = button('开始体检', () => runScan(false), true);
+		const local = button('只查本机', () => runScan(true));
+		const exportButton = button('下载报告', () => { if (report) downloadReport(report); });
 
-		function updateControls() {
-			fullScan.disabled = localScan.disabled = running;
-			exportButton.disabled = running || !report;
-			repairButton.hidden = !(report && report.can_start_dnsmasq && L.hasViewPermission());
-			repairButton.disabled = running;
+		function setNotice(message, state) {
+			notice.textContent = message;
+			notice.hidden = !message;
+			notice.dataset.state = state || '';
 		}
 
-		async function runScan(localOnly) {
-			if (running) return;
-			running = true;
-			status.textContent = '正在检测，请稍候。';
-			updateControls();
+		function update() {
+			primary.textContent = busy ? (repairInFlight ? '正在修复' : '体检中') : report ? '重新体检' : '开始体检';
+			primary.disabled = local.disabled = busy;
+			exportButton.disabled = busy || !report;
+			dom.content(steps, stageItems(progress));
+
+			if (busy) {
+				const total = progress[1] === 'skipped' ? 1 : 2;
+				const finished = progress.filter(state => state === 'done').length;
+				value.textContent = repairInFlight ? '…' : finished + '/' + total;
+				gaugeLabel.textContent = repairInFlight ? '复测中' : '体检进度';
+				dial.dataset.state = '';
+				dial.style.setProperty('--fill', (finished / total * 100) + '%');
+			} else if (report) {
+				const counts = countsFor(report.checks);
+				const verified = report.checks.length - counts.skipped;
+				value.textContent = verified ? counts.passed + '/' + verified : '—';
+				gaugeLabel.textContent = verified ? '通过 / 已测' : '没有有效结果';
+				dial.dataset.state = counts.failed + counts.warning ? 'review' : verified ? 'good' : '';
+				dial.style.setProperty('--fill', (verified ? counts.passed / verified * 100 : 0) + '%');
+				const scannedAt = new Date(report.timestamp);
+				const localTime = Number.isNaN(scannedAt.getTime()) ? '' : scannedAt.toLocaleString('zh-CN', { hour12: false });
+				const info = [ report.model, localTime, counts.skipped ? counts.skipped + ' 项未验证' : '' ];
+				meta.textContent = info.filter(Boolean).join(' · ');
+				live.textContent = verified + ' 项已测，' + counts.passed + ' 项通过，' + counts.skipped + ' 项未验证。';
+			} else {
+				value.textContent = '—';
+				gaugeLabel.textContent = '待体检';
+				dial.dataset.state = '';
+				dial.style.setProperty('--fill', '0%');
+			}
+
+			if (report) {
+				const fix = !busy && report.can_start_dnsmasq && L.hasViewPermission() ? showConfirmation : null;
+				dom.content(results, renderReport(report, fix));
+			}
+		}
+
+		async function readReport(request) {
+			const data = await request();
+			if (!data || !Array.isArray(data.checks) || !data.checks.length)
+				throw new Error('invalid diagnosis response');
+			return data;
+		}
+
+		async function runScan(localOnly, keepNotice) {
+			if (busy) return;
+			busy = true;
+			progress = [ 'running', localOnly ? 'skipped' : 'ready' ];
+			if (!keepNotice) setNotice('');
+			summary.textContent = '正在读取接口、系统与服务状态。';
+			live.textContent = summary.textContent;
+			update();
 			try {
-				const next = await (localOnly ? scanLocal() : scan());
-				if (!next || !Array.isArray(next.checks))
-					throw new Error('invalid diagnosis response');
-				report = next;
-				dom.content(details, renderReport(report));
-				status.textContent = localOnly ? '本机检查完成。' : '检测完成。';
+				report = await readReport(scanLocal);
+				progress[0] = 'done';
+				if (!localOnly) {
+					progress[1] = 'running';
+					summary.textContent = '正在验证域名解析和双栈网页访问。';
+					live.textContent = summary.textContent;
+					update();
+					report = await readReport(scan);
+					progress[1] = 'done';
+				}
+				summary.textContent = report.summary;
 			}
 			catch (error) {
-				report = null;
-				dom.content(details, []);
-				status.textContent = '未能取得检测结果。请检查 LuCI 登录状态或重新加载页面。';
+				const failed = progress[0] === 'running' ? 0 : 1;
+				progress[failed] = 'failed';
+				if (failed === 0) progress[1] = 'skipped';
+				summary.textContent = failed === 1 ? '公网阶段未完成，已保留本机结果。' : '本轮未能取得诊断结果。';
+				const recovery = report && failed === 0 ? '下方是上一次可用的报告。请确认 LuCI 登录状态后重试。' :
+					'可重试体检，也可以先检查 LuCI 登录和路由器连接。';
+				setNotice(recovery, 'error');
 				console.error(error);
 			}
 			finally {
-				running = false;
-				updateControls();
+				busy = false;
+				update();
 			}
 		}
 
 		function showConfirmation() {
-			ui.showModal('确认启动 dnsmasq', [
-				E('p', {}, '只在 dnsmasq 已启用、没有运行且 DNS 端口空闲等条件满足时尝试启动。启动会启用已有的 DNS 和 DHCP 配置。'),
+			if (busy) return;
+			ui.showModal('启动 dnsmasq 并复测', [
+				text('p', '启动会使用路由器现有的 DNS 和 DHCP 配置。继续前，请确认这台设备负责对应服务。'),
 				E('div', { 'class': 'right' }, [
 					E('button', { 'type': 'button', 'class': 'cbi-button', 'click': () => ui.hideModal() }, '取消'),
 					' ',
@@ -143,30 +337,39 @@ return view.extend({
 
 		async function runRepair() {
 			ui.hideModal();
-			if (running) return;
-			running = true;
-			result.textContent = '正在启动服务并复测 DNS。';
-			updateControls();
+			if (busy) return;
+			const localOnly = report.mode === 'local';
+			busy = repairInFlight = true;
+			summary.textContent = '正在启动 DNS 服务并验证实际解析。';
+			live.textContent = summary.textContent;
+			update();
 			try {
-				const response = await repairDns(true);
-				result.textContent = response.detail || '没有收到修复结果，请重新检测。';
+				const repair = await repairDns(true);
+				setNotice(repair.detail || '未收到修复结果，请查看复查结果。',
+					repair.state === 'repaired' ? 'success' : 'error');
 			}
 			catch (error) {
-				result.textContent = '未能执行修复。请检查权限和 LuCI 登录状态。';
+				setNotice('修复请求未执行，请检查登录和权限后重试。', 'error');
 				console.error(error);
 			}
 			finally {
-				running = false;
-				await runScan(true);
+				busy = repairInFlight = false;
+				await runScan(localOnly, true);
 			}
 		}
 
-		updateControls();
-		return E('div', {}, [
-			E('h2', {}, '软路由检测'),
-			E('p', {}, '检查 WAN、IPv6、DNS 和系统资源。一键检测会发送少量公网 ICMP 和 DNS 探测，所有结果从路由器本机采集。'),
-			E('div', { 'class': 'cbi-page-actions' }, [ fullScan, ' ', localScan, ' ', exportButton, ' ', repairButton ]),
-			status, result, details
+		update();
+		return E('div', { 'class': 'srd-root' }, [
+			E('style', {}, styles),
+			E('header', { 'class': 'srd-hero' }, [
+				E('div', { 'class': 'srd-hero-copy' }, [
+					E('div', { 'class': 'srd-hero-intro' }, [ text('h2', '软路由体检', 'srd-title'), summary ]),
+					E('div', { 'class': 'srd-actions' }, [ primary, local, exportButton ]),
+					meta
+				]),
+				dial
+			]),
+			steps, live, notice, results
 		]);
 	}
 });

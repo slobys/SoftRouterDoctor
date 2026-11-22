@@ -12,12 +12,14 @@ field() {
 }
 
 identity() {
-	json_add_string version '0.1.0-dev'
+	json_add_string version '0.2.0-dev'
 	IFS= read -r revision 2>/dev/null < "$REVISION_FILE" || revision=uninstalled
 	json_add_string revision "$revision"
 }
 
 check() {
+	# IDs are internal constants. Preserve the status for cross-check conclusions.
+	export "_srd_$1=$2"
 	json_add_object ''
 	json_add_string id "$1"
 	json_add_string state "$2"
@@ -54,7 +56,7 @@ check_wan_link() {
 	status=$(ubus -S call network.device status "{\"name\":\"$device\"}" 2>/dev/null)
 	case "$(field "$status" '@.carrier')" in
 		true) check wan_link passed 'WAN 设备报告链路已建立。' ;;
-		false) check wan_link warning 'WAN 设备未报告载波。如果此接口负责上网，请检查网线、网口或上级设备。' ;;
+		false) check wan_link warning 'WAN 网口未报告载波。' ;;
 		*) check wan_link skipped '该接口未提供可判断的载波状态。' ;;
 	esac
 }
@@ -65,7 +67,11 @@ route_state() {
 		return 1
 	}
 	if [ -z "$routes" ]; then
-		check "$2" warning '主路由表没有该协议的默认路由。策略路由、旁路由或关闭该协议时需要结合配置判断。'
+		if [ "$1" = 6 ] && [ "$wan6_active" != true ]; then
+			check "$2" skipped '未检测到正在运行的 WAN6 或 IPv6 默认路由，未验证 IPv6 公网。'
+		else
+			check "$2" warning '主路由表未找到该协议的默认出口。自定义策略路由需结合配置判断。'
+		fi
 		return 1
 	fi
 	check "$2" passed '主路由表存在该协议的默认路由。'
@@ -77,11 +83,74 @@ probe_ip() {
 	secondary=$3
 	if timeout 3 ping "-$family" -c 1 -W 2 "$primary" >/dev/null 2>&1 ||
 		timeout 3 ping "-$family" -c 1 -W 2 "$secondary" >/dev/null 2>&1; then
-		ip_answer=1
-		check "internet_v$family" passed '路由器收到了至少一个公网地址的 ICMP 回包。'
+		check "internet_v$family" passed '至少一个固定公网 IP 返回了 ICMP 回包。'
+	elif [ "$4" = passed ]; then
+		check "internet_v$family" skipped '测试地址未回 Ping，但同协议的 HTTPS 已通过。'
 	else
-		check "internet_v$family" warning '公网地址未返回 ICMP 回包。也可能是 ICMP 被过滤，需要结合 DNS 和客户端联网情况判断。'
+		check "internet_v$family" warning '两个测试地址均未回 Ping。目标过滤 ICMP 时也会出现此结果。'
 	fi
+}
+
+probe_https() {
+	local family="$1" output result detail
+	if ! command -v curl >/dev/null 2>&1; then
+		check "https_v$family" skipped '路由器未安装 curl，未进行 HTTPS 探测。'
+		return
+	fi
+	output=$(curl -q "-$family" --noproxy '*' --proto '=https' --head \
+		--connect-timeout 2 --max-time 4 --output /dev/null \
+		--write-out '%{http_code} %{time_total}' https://example.com/ 2>/dev/null)
+	result=$?
+	case "$result" in
+		0) detail=$(printf '%s\n' "$output" | awk '$1 ~ /^[1-5][0-9][0-9]$/ {
+				printf "测试站点返回 HTTP %s，本次 HTTPS 请求约 %.0f 毫秒。", $1, $2 * 1000
+			}')
+			if [ -n "$detail" ]; then
+				check "https_v$family" passed "$detail"
+				return
+			fi
+			detail='TLS 请求结束，但未取得有效 HTTP 响应。' ;;
+		6) detail='HTTPS 探测未能解析测试站点的地址。' ;;
+		7) detail='无法建立到测试站点的 TCP 连接。' ;;
+		28) detail='访问测试站点超时。' ;;
+		35) detail='与测试站点的 TLS 握手失败。' ;;
+		60|77) detail='HTTPS 证书校验失败。请检查路由器时间和 CA 证书。' ;;
+		*) detail='未能确认测试站点的 HTTPS 可用。' ;;
+	esac
+	check "https_v$family" warning "$detail"
+}
+
+check_prefix() {
+	if [ -z "$(field "$wan6" '@["ipv6-prefix"][0].address')" ] &&
+		[ -z "$(field "$wan" '@["ipv6-prefix"][0].address')" ] &&
+		[ -z "$(field "$auto6" '@["ipv6-prefix"][0].address')" ]; then
+		check prefix skipped '未在常用 WAN 接口发现上游委派前缀。是否需要委派取决于你的 IPv6 接入方式。'
+		check lan_prefix skipped '未发现上游委派前缀，未验证 LAN 前缀分配。'
+		return
+	fi
+	check prefix passed '从上游取到了 IPv6 委派前缀。'
+
+	lan=$(ubus -S call network.interface.lan status 2>/dev/null)
+	if [ "$(field "$lan" '@.up')" != true ]; then
+		check lan_prefix skipped '未找到正在运行的标准 LAN 接口。'
+	elif [ -n "$(field "$lan" '@["ipv6-prefix-assignment"][0].address')" ]; then
+		check lan_prefix passed 'LAN 接口已有 IPv6 前缀分配。终端是否收到仍需从终端检查。'
+	elif [ "$(uci -q get dhcp.lan.ra)" = relay ] ||
+		[ "$(uci -q get dhcp.lan.dhcpv6)" = relay ]; then
+		check lan_prefix skipped 'LAN 使用 IPv6 中继，跳过路由模式的前缀分配判断。'
+	else
+		check lan_prefix warning 'WAN 有委派前缀，标准 LAN 接口未显示前缀分配。'
+	fi
+}
+
+check_writable() {
+	flags=$(awk '$2 == "/overlay" { overlay = $4 } $2 == "/" { root = $4 }
+		END { print (overlay ? overlay : root) }' /proc/mounts)
+	case ",$flags," in
+		*,ro,*) check writable failed '系统可写层或根挂载处于只读状态。' ;;
+		*,rw,*) check writable passed '系统可写层挂载为可读写。' ;;
+		*) check writable skipped '无法确认系统可写层的挂载状态。' ;;
+	esac
 }
 
 resolve_name() {
@@ -163,6 +232,75 @@ check_resources() {
 	fi
 }
 
+finding() {
+	[ -n "$first_finding" ] || first_finding=$3
+	json_add_object ''
+	json_add_string id "$1"
+	json_add_string level "$2"
+	json_add_string title "$3"
+	json_add_string advice "$4"
+	json_add_string action "$5"
+	shift 5
+	json_add_array evidence
+	for evidence_id in "$@"; do
+		json_add_string '' "$evidence_id"
+	done
+	json_close_array
+	json_close_object
+}
+
+assemble_findings() {
+	first_finding=
+	json_add_array findings
+	if [ "$_srd_wan_link" = warning ] && [ "$have_v4" -eq 0 ] && [ "$have_v6" -eq 0 ]; then
+		finding wan_disconnected high 'WAN 没有链路，且未发现默认出口' \
+			'如果这台设备负责上网，先检查 WAN 网线、光猫或上级路由的网口。恢复链接后再体检。' '' wan_link route_v4 route_v6
+	elif [ "$_srd_route_v4" = warning ] && [ "$have_v6" -eq 0 ]; then
+		finding no_default_route review '没有从主路由表找到默认出口' \
+			'检查 WAN 是否拿到了网关。旁路由请核对上级网关，使用策略路由时核对实际出站链路。' '' wan route_v4
+	fi
+	if [ "$_srd_writable" = failed ]; then
+		finding filesystem_readonly high '配置可能无法保存' \
+			'先导出重要配置，再检查系统日志中的存储或文件系统错误。' '' writable storage
+	fi
+	if [ "$dns_repair" -eq 1 ]; then
+		finding dns_service_stopped high '已启用的 dnsmasq 停止了' \
+			'如果这台设备负责 DNS 或 DHCP，可以沿用现有配置启动服务，并实际查询域名复查。' start_dnsmasq dnsmasq dns
+	elif [ "$_srd_dns" = warning ] &&
+		{ [ "$_srd_internet_v4" = passed ] || [ "$_srd_internet_v6" = passed ]; }; then
+		finding dns_resolution high '公网 IP 有回包，但域名解析失败' \
+			'先检查当前 DNS 服务的转发目标，再核对上游 DNS 是否响应。' '' dns internet_v4 internet_v6
+	fi
+
+	if [ "$_srd_https_v4" = passed ] && [ "$_srd_https_v6" = warning ]; then
+		finding ipv6_web review 'IPv4 网页可达，IPv6 网页探测失败' \
+			'优先检查 IPv6 默认路由和上游连通性。用终端复测网页，确认问题是否只影响部分站点。' '' https_v4 https_v6 route_v6
+	elif [ "$_srd_https_v6" = passed ] && [ "$_srd_https_v4" = warning ]; then
+		finding ipv4_web review 'IPv6 网页可达，IPv4 网页探测失败' \
+			'检查 IPv4 出口、策略路由和防火墙。可以先从终端验证其他 IPv4 站点。' '' https_v6 https_v4 route_v4
+	elif [ "$_srd_dns" = passed ] &&
+		{ [ "$_srd_https_v4" = warning ] || [ "$_srd_https_v6" = warning ]; }; then
+		finding web_connection review '有域名可解析，测试站点仍未确认可达' \
+			'展开证据查看是连接超时、TLS 校验失败，还是测试站点单独异常，再从终端验证其他网站。' '' dns https_v4 https_v6
+	elif [ "$_srd_dns" = warning ] && [ "$first_finding" = '' ]; then
+		finding upstream_unverified review '域名解析和公网连接需要分别核实' \
+			'先核对出口能否上网，再检查 DNS 上游。如果只有一台终端异常，优先在该终端复查。' '' dns internet_v4 internet_v6
+	fi
+	if [ "$_srd_lan_prefix" = warning ]; then
+		finding missing_lan_prefix review '上游有 IPv6 前缀，LAN 未显示分配' \
+			'如果内网需要路由模式 IPv6，到 LAN 设置核对分配长度和 RA，再从终端检查是否收到 IPv6 地址。' '' prefix lan_prefix
+	fi
+	if [ "$_srd_storage" = warning ] && [ "$_srd_writable" != failed ]; then
+		finding low_storage review '系统可写空间接近用完' \
+			'查看可写分区占用，优先处理确认可删的旧文件，或扩容后重新体检。' '' storage writable
+	fi
+	if [ "$_srd_memory" = warning ]; then
+		finding low_memory review '路由器可用内存偏低' \
+			'到 LuCI 的进程列表查看高占用服务，并观察占用是否持续增长。' '' memory
+	fi
+	json_close_array
+}
+
 scan() {
 	mode=$1
 	board=$(ubus -S call system board 2>/dev/null)
@@ -174,9 +312,10 @@ scan() {
 		wan6=$auto6
 		wan6_label='自动派生的 WAN6'
 	fi
+	wan6_active=$(field "$wan6" '@.up')
 	dns_repair=0
-	dns_answer=0
-	ip_answer=0
+	have_v4=0
+	have_v6=0
 
 	json_init
 	identity
@@ -187,57 +326,55 @@ scan() {
 	json_add_array checks
 	check_wan_link "$wan"
 	check_wan wan "$wan" '@["ipv4-address"][0].address' 'WAN'
-	check_wan wan6 "$wan6" '@["ipv6-address"][0].address' "$wan6_label"
-	if [ -z "$wan6" ] && [ -z "$wan" ]; then
-		check prefix skipped '未找到常用 WAN 接口。'
-	elif [ -n "$(field "$wan6" '@["ipv6-prefix"][0].address')" ] ||
-		[ -n "$(field "$wan" '@["ipv6-prefix"][0].address')" ]; then
-		check prefix passed '检测到 WAN 接口取得 IPv6 前缀。客户端是否收到前缀需在客户端复查。'
+	if [ "$wan6_active" = true ]; then
+		check_wan wan6 "$wan6" '@["ipv6-address"][0].address' "$wan6_label"
 	else
-		check prefix skipped '未在常用 WAN 接口发现 IPv6 前缀。仅在需要下发 IPv6 前缀时进一步排查。'
+		check wan6 skipped '未发现正在运行的常用 WAN6 接口。'
 	fi
-	have_v4=0
-	have_v6=0
+	check_prefix
 	route_state 4 route_v4 && have_v4=1
 	route_state 6 route_v6 && have_v6=1
 	check_dns_service
 	if [ "$mode" = online ]; then
-		if resolve_name openwrt.org || resolve_name example.com; then
-			dns_answer=1
-			check dns passed '路由器使用系统默认解析器取得了至少一个测试域名的地址。'
+		if resolve_name example.com || resolve_name openwrt.org; then
+			check dns passed '当前解析器取得了至少一个测试域名的地址。'
 		else
-			check dns warning '测试域名未返回地址。请结合 DNS 服务和上游连通结果判断。'
+			check dns warning '两个测试域名都未返回可用地址。'
 		fi
 		if [ "$have_v4" -eq 1 ]; then
-			probe_ip 4 1.1.1.1 223.5.5.5
+			probe_https 4
+			probe_ip 4 1.1.1.1 223.5.5.5 "$_srd_https_v4"
 		else
-			check internet_v4 skipped '主路由表无 IPv4 默认路由，跳过公网探测。'
+			check https_v4 skipped '缺少 IPv4 默认路由，未验证 HTTPS。'
+			check internet_v4 skipped '缺少 IPv4 默认路由，未发送 ICMP 探测。'
 		fi
 		if [ "$have_v6" -eq 1 ]; then
-			probe_ip 6 2606:4700:4700::1111 2001:4860:4860::8888
+			probe_https 6
+			probe_ip 6 2606:4700:4700::1111 2001:4860:4860::8888 "$_srd_https_v6"
 		else
-			check internet_v6 skipped '主路由表无 IPv6 默认路由，跳过公网探测。'
+			check https_v6 skipped '缺少 IPv6 默认路由，未验证 HTTPS。'
+			check internet_v6 skipped '缺少 IPv6 默认路由，未发送 ICMP 探测。'
 		fi
 	else
 		check dns skipped '仅检查本机，未查询测试域名。'
 		check internet_v4 skipped '仅检查本机，未发送公网探测。'
 		check internet_v6 skipped '仅检查本机，未发送公网探测。'
+		check https_v4 skipped '仅检查本机，未访问测试网站。'
+		check https_v6 skipped '仅检查本机，未访问测试网站。'
 	fi
+	check_writable
 	check_resources
 	json_close_array
 	json_add_boolean can_start_dnsmasq "$dns_repair"
-	if [ "$dns_repair" -eq 1 ]; then
-		json_add_string summary '检测到已启用但未运行的 dnsmasq。请优先查看 DNS 服务及现有 DHCP 配置。'
+	assemble_findings
+	if [ -n "$first_finding" ]; then
+		json_add_string summary "$first_finding"
 	elif [ "$mode" = local ]; then
-		json_add_string summary '已检查路由器本机状态。公网连接和域名解析未验证。'
-	elif [ "$dns_answer" -eq 0 ] && [ "$ip_answer" -eq 1 ]; then
-		json_add_string summary '公网 IP 有回包，但域名查询失败。优先排查路由器的 DNS 转发和上游解析。'
-	elif [ "$dns_answer" -eq 0 ]; then
-		json_add_string summary '域名查询和公网探测都未确认可用。先核对 WAN 链路和默认路由。'
-	elif [ "$ip_answer" -eq 0 ]; then
-		json_add_string summary '域名可以解析。公网 ICMP 未验证成功，必要时在终端上实际访问网页复查。'
+		json_add_string summary '已检查接口、服务和系统资源。'
+	elif [ "$_srd_https_v4" = passed ] || [ "$_srd_https_v6" = passed ]; then
+		json_add_string summary '从路由器访问测试网站成功。'
 	else
-		json_add_string summary '路由器可以解析测试域名，至少一个公网地址有回包。客户端联网情况需单独验证。'
+		json_add_string summary '本轮未取得网页访问通过的证据，请查看未验证项。'
 	fi
 	json_dump
 }
