@@ -1,5 +1,13 @@
 # 预览版验证记录
 
+## v0.6 路由设备自动发现
+
+在 NanoPi R4S 的 iStoreOS 25.12.6 和 Argon 上验证提交 `b727df4232e9df1bb6c7d2d6d1a03a31a47a3bc6`。从 R4S 的 LAN 口和 Windows 电脑网卡分别收到同型号的两台 TP-Link TL-XDR5430 的 LLDP 通告。两台设备使用不同的管理地址和 MAC，各自通告启用了 WLAN AP。在实际浏览器验证两台设备分别显示在拓扑的两端，中间接线显示为待确认。360 T7 由 DHCP 自报名和管理页识别，并显示为接线位置待核实。
+
+- Windows 脚本实测确认 R4S 为电脑的默认网关和第一个 IPv4 跳点。桥接表显示电脑流量来自 R4S 的 `eth1`。实测 Windows 支持已安装的 Wireshark/Npcap。
+- 实际 LuCI 验证一键发现、同型号设备的区分、可选报告导入、设备发现权限及 390 像素布局。安装前后 network、firewall、dhcp 配置摘要一致。
+- R4S 上的 `tests/router-discovery.sh` 使用隔离数据验证探测范围、管理页识别、LLDP 解析及仅监听的重试。`tests/topology.sh` 验证路由优先级、设备地址归并和桥接端口展示。
+
 ## v0.5 家庭网络拓扑
 
 2026-11-22，在 NanoPi R4S 的 iStoreOS 25.12.6 和 Argon 上验证提交 `574ff37324789239c883110c36485a7864ee3f0e`。实机读取了 `pppoe-wan` 双栈出口、`br-lan`、桥接端口 `eth1`，以及这一轮的 19 台设备记录。安装前后的网络、防火墙和 DHCP 配置摘要一致。
