@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <title>KoolCenter 固件下载服务器</title>
+  <link rel="stylesheet" href="/theme/bootstrap.min.css">
+  <link rel="stylesheet" href="/theme/font-awesome/4.7.0/css/font-awesome.min.css">
+  <link rel="stylesheet" href="/theme/theme.css">
+  <link rel="stylesheet" href="/theme/editormd.preview.min.css" />
+  <link data-n-head="ssr" rel="icon" type="image/x-icon" href="/theme/favicon.svg">
+  <script type="text/javascript" src="/theme/js/breadcrumbs.js"></script>
+  <script type="text/javascript" src="/theme/js/list.js"></script>
+</head>
+
+<body>
+  <div class="header">
+    <nav class="navbar sticky-top container">
+      <div class="navbar-brand">
+        <a href="/"><img style="vertical-align: text-top;" src="/theme/logo.svg"> 固件下载服务器</a>
+      </div>
+    </nav>
+  </div>
+  <div id="page-content" class="container">
+    <div class="alert alert-success" role="alert" style="display:none">
+    <span class="fa fa-bullhorn"></span>  最新发布的<b>官改/梅林改版固件</b>都会做隐藏处理，直到下个版本发布才会取消隐藏，最新固件请前往 <span class="glyphicon glyphicon-link"></span> <a target="_blank" href="https://www.koolcenter.com" class="alert-link">KoolCenter</a> 下载
+    </div>
+    <!--<div class="alert alert-success" role="alert">
+    <span class="fa fa-bullhorn"></span> 【20220307】梅林改版固件386.5_2已经发布，包含19款机型！新增网件RAX70支持！详情请前往：<a href="https://www.koolcenter.com/posts/130" target="_blank"><b> 梅林改版固件 386.5_2 发布 by koolcenter </b></a>
+    </div>
+    <div class="alert alert-success" role="alert">
+    <span class="fa fa-bullhorn"></span> 【20220308】华硕ROG GT-AX6000 红蜘蛛电竞路由官改固件发布了！现在有软件中心了！详情请前往：<a href="https://www.koolcenter.com/posts/125" target="_blank"><b> ROG GT-AX6000 华硕红蜘蛛官改固件 </b></a>
+    </div>-->
+ </div>
+  <div class="container">
+    <nav aria-label="breadcrumb">
+      <ol class="breadcrumb" id="breadcrumbs"/>
+    </nav>
+	<div id="layout">
+		<div id="markdown-view">
+		   <textarea style="display:none;" name="markdown-doc"></textarea>
+		</div>
+	</div>
+    <div class="row">
+      <div class="col">
+<table id="list"><thead><tr><th style="width:55%"><a href="?C=N&O=A">File Name</a>&nbsp;<a href="?C=N&O=D">&nbsp;&darr;&nbsp;</a></th><th style="width:20%"><a href="?C=S&O=A">File Size</a>&nbsp;<a href="?C=S&O=D">&nbsp;&darr;&nbsp;</a></th><th style="width:25%"><a href="?C=M&O=A">Date</a>&nbsp;<a href="?C=M&O=D">&nbsp;&darr;&nbsp;</a></th></tr></thead>
+<tbody><tr><td><a href="../">Parent directory/</a></td><td>-</td><td>-</td></tr><tr><td><a href="version.latest.v2" title="version.latest.v2">version.latest.v2</a></td><td>856 B</td><td>2026-11-06 16:31</td></tr>
+<tr><td><a href="version.latest" title="version.latest">version.latest</a></td><td>861 B</td><td>2026-08-14 13:32</td></tr>
+<tr><td><a href="version.index.v2" title="version.index.v2">version.index.v2</a></td><td>19 B</td><td>2026-11-06 16:27</td></tr>
+<tr><td><a href="version.index" title="version.index">version.index</a></td><td>19 B</td><td>2026-08-14 13:29</td></tr>
+<tr><td><a href="ota.footer.html" title="ota.footer.html">ota.footer.html</a></td><td>416 B</td><td>2023-03-31 20:02</td></tr>
+<tr><td><a href="openwrt-2022071511-nanopi-r4s-squashfs.img.gz" title="openwrt-2022071511-nanopi-r4s-squashfs.img.gz">openwrt-2022071511-nanopi-r4s-squashfs.img.gz</a></td><td>96.5 MiB</td><td>2023-03-31 14:21</td></tr>
+<tr><td><a href="openwrt-2022062121-nanopi-r4s-squashfs.img.gz" title="openwrt-2022062121-nanopi-r4s-squashfs.img.gz">openwrt-2022062121-nanopi-r4s-squashfs.img.gz</a></td><td>93.5 MiB</td><td>2023-03-31 14:21</td></tr>
+<tr><td><a href="openwrt-2022061017-nanopi-r4s-squashfs.img.gz" title="openwrt-2022061017-nanopi-r4s-squashfs.img.gz">openwrt-2022061017-nanopi-r4s-squashfs.img.gz</a></td><td>93.5 MiB</td><td>2023-03-31 14:21</td></tr>
+<tr><td><a href="openwrt-2022060710-nanopi-r4s-squashfs.img.gz" title="openwrt-2022060710-nanopi-r4s-squashfs.img.gz">openwrt-2022060710-nanopi-r4s-squashfs.img.gz</a></td><td>93.5 MiB</td><td>2023-03-31 14:21</td></tr>
+<tr><td><a href="openwrt-2022060709-nanopi-r4s-squashfs.img.gz" title="openwrt-2022060709-nanopi-r4s-squashfs.img.gz">openwrt-2022060709-nanopi-r4s-squashfs.img.gz</a></td><td>93.5 MiB</td><td>2023-03-31 14:21</td></tr>
+<tr><td><a href="istoreos-25.12.6-2026110611-r4s-squashfs.img.gz" title="istoreos-25.12.6-2026110611-r4s-squashfs.img.gz">istoreos-25.12.6-2026110611-r4s-squashfs.img.gz</a></td><td>157.6 MiB</td><td>2026-11-06 12:13</td></tr>
+<tr><td><a href="istoreos-25.12.6-2026103017-r4s-squashfs.img.gz" title="istoreos-25.12.6-2026103017-r4s-squashfs.img.gz">istoreos-25.12.6-2026103017-r4s-squashfs.img.gz</a></td><td>157.6 MiB</td><td>2026-10-30 18:50</td></tr>
+<tr><td><a href="istoreos-25.12.6-2026102312-r4s-squashfs.img.gz" title="istoreos-25.12.6-2026102312-r4s-squashfs.img.gz">istoreos-25.12.6-2026102312-r4s-squashfs.img.gz</a></td><td>159.0 MiB</td><td>2026-10-23 13:53</td></tr>
+<tr><td><a href="istoreos-25.12.5-2026092410-r4s-squashfs.img.gz" title="istoreos-25.12.5-2026092410-r4s-squashfs.img.gz">istoreos-25.12.5-2026092410-r4s-squashfs.img.gz</a></td><td>159.0 MiB</td><td>2026-09-24 11:36</td></tr>
+<tr><td><a href="istoreos-25.12.5-2026091113-r4s-squashfs.img.gz" title="istoreos-25.12.5-2026091113-r4s-squashfs.img.gz">istoreos-25.12.5-2026091113-r4s-squashfs.img.gz</a></td><td>159.0 MiB</td><td>2026-09-11 15:02</td></tr>
+<tr><td><a href="istoreos-24.10.8-2026081412-r4s-squashfs.img.gz" title="istoreos-24.10.8-2026081412-r4s-squashfs.img.gz">istoreos-24.10.8-2026081412-r4s-squashfs.img.gz</a></td><td>160.2 MiB</td><td>2026-08-14 12:38</td></tr>
+<tr><td><a href="istoreos-24.10.8-2026073111-r4s-squashfs.img.gz" title="istoreos-24.10.8-2026073111-r4s-squashfs.img.gz">istoreos-24.10.8-2026073111-r4s-squashfs.img.gz</a></td><td>167.0 MiB</td><td>2026-07-31 12:03</td></tr>
+<tr><td><a href="istoreos-24.10.7-2026072811-r4s-squashfs.img.gz" title="istoreos-24.10.7-2026072811-r4s-squashfs.img.gz">istoreos-24.10.7-2026072811-r4s-squashfs.img.gz</a></td><td>167.0 MiB</td><td>2026-07-28 11:52</td></tr>
+<tr><td><a href="istoreos-24.10.7-2026070313-r4s-squashfs.img.gz" title="istoreos-24.10.7-2026070313-r4s-squashfs.img.gz">istoreos-24.10.7-2026070313-r4s-squashfs.img.gz</a></td><td>167.0 MiB</td><td>2026-07-03 13:57</td></tr>
+<tr><td><a href="istoreos-24.10.7-2026060510-r4s-squashfs.img.gz" title="istoreos-24.10.7-2026060510-r4s-squashfs.img.gz">istoreos-24.10.7-2026060510-r4s-squashfs.img.gz</a></td><td>166.9 MiB</td><td>2026-06-05 12:24</td></tr>
+<tr><td><a href="istoreos-24.10.6-2026041710-r4s-squashfs.img.gz" title="istoreos-24.10.6-2026041710-r4s-squashfs.img.gz">istoreos-24.10.6-2026041710-r4s-squashfs.img.gz</a></td><td>165.0 MiB</td><td>2026-04-17 11:20</td></tr>
+<tr><td><a href="istoreos-24.10.5-2026041010-r4s-squashfs.img.gz" title="istoreos-24.10.5-2026041010-r4s-squashfs.img.gz">istoreos-24.10.5-2026041010-r4s-squashfs.img.gz</a></td><td>165.0 MiB</td><td>2026-04-10 11:40</td></tr>
+<tr><td><a href="istoreos-24.10.5-2026040311-r4s-squashfs.img.gz" title="istoreos-24.10.5-2026040311-r4s-squashfs.img.gz">istoreos-24.10.5-2026040311-r4s-squashfs.img.gz</a></td><td>165.0 MiB</td><td>2026-04-03 14:57</td></tr>
+<tr><td><a href="istoreos-24.10.5-2026032011-r4s-squashfs.img.gz" title="istoreos-24.10.5-2026032011-r4s-squashfs.img.gz">istoreos-24.10.5-2026032011-r4s-squashfs.img.gz</a></td><td>165.0 MiB</td><td>2026-03-20 12:05</td></tr>
+<tr><td><a href="istoreos-24.10.5-2025123110-r4s-squashfs.img.gz" title="istoreos-24.10.5-2025123110-r4s-squashfs.img.gz">istoreos-24.10.5-2025123110-r4s-squashfs.img.gz</a></td><td>163.1 MiB</td><td>2025-12-31 11:10</td></tr>
+<tr><td><a href="istoreos-24.10.4-2025122612-r4s-squashfs.img.gz" title="istoreos-24.10.4-2025122612-r4s-squashfs.img.gz">istoreos-24.10.4-2025122612-r4s-squashfs.img.gz</a></td><td>163.0 MiB</td><td>2025-12-26 17:17</td></tr>
+<tr><td><a href="istoreos-24.10.4-2025121911-r4s-squashfs.img.gz" title="istoreos-24.10.4-2025121911-r4s-squashfs.img.gz">istoreos-24.10.4-2025121911-r4s-squashfs.img.gz</a></td><td>163.0 MiB</td><td>2025-12-19 11:50</td></tr>
+<tr><td><a href="istoreos-24.10.4-2025120511-r4s-squashfs.img.gz" title="istoreos-24.10.4-2025120511-r4s-squashfs.img.gz">istoreos-24.10.4-2025120511-r4s-squashfs.img.gz</a></td><td>163.0 MiB</td><td>2025-12-05 14:27</td></tr>
+<tr><td><a href="istoreos-24.10.4-2025112811-r4s-squashfs.img.gz" title="istoreos-24.10.4-2025112811-r4s-squashfs.img.gz">istoreos-24.10.4-2025112811-r4s-squashfs.img.gz</a></td><td>163.0 MiB</td><td>2025-11-28 12:22</td></tr>
+<tr><td><a href="istoreos-24.10.4-2025112116-r4s-squashfs.img.gz" title="istoreos-24.10.4-2025112116-r4s-squashfs.img.gz">istoreos-24.10.4-2025112116-r4s-squashfs.img.gz</a></td><td>162.8 MiB</td><td>2025-11-21 17:16</td></tr>
+<tr><td><a href="istoreos-24.10.4-2025102410-r4s-squashfs.img.gz" title="istoreos-24.10.4-2025102410-r4s-squashfs.img.gz">istoreos-24.10.4-2025102410-r4s-squashfs.img.gz</a></td><td>162.8 MiB</td><td>2025-10-24 15:58</td></tr>
+<tr><td><a href="istoreos-24.10.3-2025101711-r4s-squashfs.img.gz" title="istoreos-24.10.3-2025101711-r4s-squashfs.img.gz">istoreos-24.10.3-2025101711-r4s-squashfs.img.gz</a></td><td>162.8 MiB</td><td>2025-10-17 11:54</td></tr>
+<tr><td><a href="istoreos-24.10.3-2025093010-r4s-squashfs.img.gz" title="istoreos-24.10.3-2025093010-r4s-squashfs.img.gz">istoreos-24.10.3-2025093010-r4s-squashfs.img.gz</a></td><td>162.7 MiB</td><td>2025-09-30 11:22</td></tr>
+<tr><td><a href="istoreos-24.10.2-2025092610-r4s-squashfs.img.gz" title="istoreos-24.10.2-2025092610-r4s-squashfs.img.gz">istoreos-24.10.2-2025092610-r4s-squashfs.img.gz</a></td><td>161.3 MiB</td><td>2025-09-26 15:01</td></tr>
+<tr><td><a href="istoreos-24.10.2-2025090517-r4s-squashfs.img.gz" title="istoreos-24.10.2-2025090517-r4s-squashfs.img.gz">istoreos-24.10.2-2025090517-r4s-squashfs.img.gz</a></td><td>161.3 MiB</td><td>2025-09-05 17:55</td></tr>
+<tr><td><a href="istoreos-24.10.2-2025082211-r4s-squashfs.img.gz" title="istoreos-24.10.2-2025082211-r4s-squashfs.img.gz">istoreos-24.10.2-2025082211-r4s-squashfs.img.gz</a></td><td>160.7 MiB</td><td>2025-08-22 14:16</td></tr>
+<tr><td><a href="istoreos-24.10.2-2025080813-r4s-squashfs.img.gz" title="istoreos-24.10.2-2025080813-r4s-squashfs.img.gz">istoreos-24.10.2-2025080813-r4s-squashfs.img.gz</a></td><td>160.5 MiB</td><td>2025-08-08 14:20</td></tr>
+<tr><td><a href="istoreos-24.10.2-2025080110-r4s-squashfs.img.gz" title="istoreos-24.10.2-2025080110-r4s-squashfs.img.gz">istoreos-24.10.2-2025080110-r4s-squashfs.img.gz</a></td><td>160.4 MiB</td><td>2025-08-01 10:50</td></tr>
+<tr><td><a href="istoreos-24.10.2-2025072517-r4s-squashfs.img.gz" title="istoreos-24.10.2-2025072517-r4s-squashfs.img.gz">istoreos-24.10.2-2025072517-r4s-squashfs.img.gz</a></td><td>160.2 MiB</td><td>2025-07-25 18:46</td></tr>
+<tr><td><a href="istoreos-24.10.2-2025071810-r4s-squashfs.img.gz" title="istoreos-24.10.2-2025071810-r4s-squashfs.img.gz">istoreos-24.10.2-2025071810-r4s-squashfs.img.gz</a></td><td>160.2 MiB</td><td>2025-07-18 10:14</td></tr>
+<tr><td><a href="istoreos-24.10.2-2025071110-r4s-squashfs.img.gz" title="istoreos-24.10.2-2025071110-r4s-squashfs.img.gz">istoreos-24.10.2-2025071110-r4s-squashfs.img.gz</a></td><td>158.4 MiB</td><td>2025-07-11 11:21</td></tr>
+<tr><td><a href="istoreos-24.10.2-2025070410-r4s-squashfs.img.gz" title="istoreos-24.10.2-2025070410-r4s-squashfs.img.gz">istoreos-24.10.2-2025070410-r4s-squashfs.img.gz</a></td><td>158.5 MiB</td><td>2025-07-04 11:20</td></tr>
+<tr><td><a href="istoreos-24.10.1-2025062010-r4s-squashfs.img.gz" title="istoreos-24.10.1-2025062010-r4s-squashfs.img.gz">istoreos-24.10.1-2025062010-r4s-squashfs.img.gz</a></td><td>158.4 MiB</td><td>2025-06-20 11:22</td></tr>
+<tr><td><a href="istoreos-24.10.1-2025060614-r4s-squashfs.img.gz" title="istoreos-24.10.1-2025060614-r4s-squashfs.img.gz">istoreos-24.10.1-2025060614-r4s-squashfs.img.gz</a></td><td>160.2 MiB</td><td>2025-06-06 15:18</td></tr>
+<tr><td><a href="istoreos-24.10.1-2025052311-r4s-squashfs.img.gz" title="istoreos-24.10.1-2025052311-r4s-squashfs.img.gz">istoreos-24.10.1-2025052311-r4s-squashfs.img.gz</a></td><td>158.2 MiB</td><td>2025-05-23 11:42</td></tr>
+<tr><td><a href="istoreos-22.03.7-2025050912-r4s-squashfs.img.gz" title="istoreos-22.03.7-2025050912-r4s-squashfs.img.gz">istoreos-22.03.7-2025050912-r4s-squashfs.img.gz</a></td><td>112.4 MiB</td><td>2025-05-09 13:11</td></tr>
+<tr><td><a href="istoreos-22.03.7-2025040711-r4s-squashfs.img.gz" title="istoreos-22.03.7-2025040711-r4s-squashfs.img.gz">istoreos-22.03.7-2025040711-r4s-squashfs.img.gz</a></td><td>112.4 MiB</td><td>2025-04-07 11:53</td></tr>
+<tr><td><a href="istoreos-22.03.7-2025040313-r4s-squashfs.img.gz" title="istoreos-22.03.7-2025040313-r4s-squashfs.img.gz">istoreos-22.03.7-2025040313-r4s-squashfs.img.gz</a></td><td>112.4 MiB</td><td>2025-04-03 15:25</td></tr>
+<tr><td><a href="istoreos-22.03.7-2024120615-r4s-squashfs.img.gz" title="istoreos-22.03.7-2024120615-r4s-squashfs.img.gz">istoreos-22.03.7-2024120615-r4s-squashfs.img.gz</a></td><td>112.1 MiB</td><td>2024-12-06 16:30</td></tr>
+<tr><td><a href="istoreos-22.03.7-2024080210-r4s-squashfs.img.gz" title="istoreos-22.03.7-2024080210-r4s-squashfs.img.gz">istoreos-22.03.7-2024080210-r4s-squashfs.img.gz</a></td><td>112.0 MiB</td><td>2024-08-02 10:56</td></tr>
+<tr><td><a href="istoreos-22.03.6-2024071911-r4s-squashfs.img.gz" title="istoreos-22.03.6-2024071911-r4s-squashfs.img.gz">istoreos-22.03.6-2024071911-r4s-squashfs.img.gz</a></td><td>111.9 MiB</td><td>2024-07-19 11:49</td></tr>
+<tr><td><a href="istoreos-22.03.6-2024062810-r4s-squashfs.img.gz" title="istoreos-22.03.6-2024062810-r4s-squashfs.img.gz">istoreos-22.03.6-2024062810-r4s-squashfs.img.gz</a></td><td>111.8 MiB</td><td>2024-06-28 11:06</td></tr>
+<tr><td><a href="istoreos-22.03.6-2024061415-r4s-squashfs.img.gz" title="istoreos-22.03.6-2024061415-r4s-squashfs.img.gz">istoreos-22.03.6-2024061415-r4s-squashfs.img.gz</a></td><td>111.8 MiB</td><td>2024-06-14 17:33</td></tr>
+<tr><td><a href="istoreos-22.03.6-2024052410-r4s-squashfs.img.gz" title="istoreos-22.03.6-2024052410-r4s-squashfs.img.gz">istoreos-22.03.6-2024052410-r4s-squashfs.img.gz</a></td><td>111.8 MiB</td><td>2024-05-24 10:50</td></tr>
+<tr><td><a href="istoreos-22.03.6-2024051012-r4s-squashfs.img.gz" title="istoreos-22.03.6-2024051012-r4s-squashfs.img.gz">istoreos-22.03.6-2024051012-r4s-squashfs.img.gz</a></td><td>106.1 MiB</td><td>2024-05-10 12:37</td></tr>
+<tr><td><a href="istoreos-22.03.6-2024043010-r4s-squashfs.img.gz" title="istoreos-22.03.6-2024043010-r4s-squashfs.img.gz">istoreos-22.03.6-2024043010-r4s-squashfs.img.gz</a></td><td>106.1 MiB</td><td>2024-04-30 11:29</td></tr>
+<tr><td><a href="istoreos-22.03.6-2024041213-r4s-squashfs.img.gz" title="istoreos-22.03.6-2024041213-r4s-squashfs.img.gz">istoreos-22.03.6-2024041213-r4s-squashfs.img.gz</a></td><td>106.1 MiB</td><td>2024-04-12 13:54</td></tr>
+<tr><td><a href="istoreos-22.03.6-2024031514-r4s-squashfs.img.gz" title="istoreos-22.03.6-2024031514-r4s-squashfs.img.gz">istoreos-22.03.6-2024031514-r4s-squashfs.img.gz</a></td><td>106.1 MiB</td><td>2024-03-15 14:43</td></tr>
+<tr><td><a href="istoreos-22.03.6-2024030112-r4s-squashfs.img.gz" title="istoreos-22.03.6-2024030112-r4s-squashfs.img.gz">istoreos-22.03.6-2024030112-r4s-squashfs.img.gz</a></td><td>106.1 MiB</td><td>2024-03-01 13:21</td></tr>
+<tr><td><a href="istoreos-22.03.6-2024022310-r4s-squashfs.img.gz" title="istoreos-22.03.6-2024022310-r4s-squashfs.img.gz">istoreos-22.03.6-2024022310-r4s-squashfs.img.gz</a></td><td>106.1 MiB</td><td>2024-02-23 11:28</td></tr>
+<tr><td><a href="istoreos-22.03.6-2024012613-r4s-squashfs.img.gz" title="istoreos-22.03.6-2024012613-r4s-squashfs.img.gz">istoreos-22.03.6-2024012613-r4s-squashfs.img.gz</a></td><td>106.1 MiB</td><td>2024-01-26 14:38</td></tr>
+<tr><td><a href="istoreos-22.03.6-2024011910-r4s-squashfs.img.gz" title="istoreos-22.03.6-2024011910-r4s-squashfs.img.gz">istoreos-22.03.6-2024011910-r4s-squashfs.img.gz</a></td><td>106.0 MiB</td><td>2024-01-19 11:29</td></tr>
+<tr><td><a href="istoreos-22.03.6-2024011211-r4s-squashfs.img.gz" title="istoreos-22.03.6-2024011211-r4s-squashfs.img.gz">istoreos-22.03.6-2024011211-r4s-squashfs.img.gz</a></td><td>106.0 MiB</td><td>2024-01-12 11:48</td></tr>
+<tr><td><a href="istoreos-22.03.5-2023122916-r4s-squashfs.img.gz" title="istoreos-22.03.5-2023122916-r4s-squashfs.img.gz">istoreos-22.03.5-2023122916-r4s-squashfs.img.gz</a></td><td>105.1 MiB</td><td>2023-12-29 17:13</td></tr>
+<tr><td><a href="istoreos-22.03.5-2023121510-r4s-squashfs.img.gz" title="istoreos-22.03.5-2023121510-r4s-squashfs.img.gz">istoreos-22.03.5-2023121510-r4s-squashfs.img.gz</a></td><td>105.3 MiB</td><td>2023-12-15 19:45</td></tr>
+<tr><td><a href="istoreos-22.03.5-2023120811-r4s-squashfs.img.gz" title="istoreos-22.03.5-2023120811-r4s-squashfs.img.gz">istoreos-22.03.5-2023120811-r4s-squashfs.img.gz</a></td><td>105.5 MiB</td><td>2023-12-08 12:24</td></tr>
+<tr><td><a href="istoreos-22.03.5-2023120112-r4s-squashfs.img.gz" title="istoreos-22.03.5-2023120112-r4s-squashfs.img.gz">istoreos-22.03.5-2023120112-r4s-squashfs.img.gz</a></td><td>105.4 MiB</td><td>2023-12-01 13:03</td></tr>
+<tr><td><a href="istoreos-22.03.5-2023112413-r4s-squashfs.img.gz" title="istoreos-22.03.5-2023112413-r4s-squashfs.img.gz">istoreos-22.03.5-2023112413-r4s-squashfs.img.gz</a></td><td>105.4 MiB</td><td>2023-11-24 14:20</td></tr>
+<tr><td><a href="istoreos-22.03.5-2023102711-r4s-squashfs.img.gz" title="istoreos-22.03.5-2023102711-r4s-squashfs.img.gz">istoreos-22.03.5-2023102711-r4s-squashfs.img.gz</a></td><td>105.3 MiB</td><td>2023-10-27 12:11</td></tr>
+<tr><td><a href="istoreos-22.03.5-2023102014-r4s-squashfs.img.gz" title="istoreos-22.03.5-2023102014-r4s-squashfs.img.gz">istoreos-22.03.5-2023102014-r4s-squashfs.img.gz</a></td><td>104.7 MiB</td><td>2023-10-20 15:30</td></tr>
+<tr><td><a href="istoreos-22.03.5-2023092815-r4s-squashfs.img.gz" title="istoreos-22.03.5-2023092815-r4s-squashfs.img.gz">istoreos-22.03.5-2023092815-r4s-squashfs.img.gz</a></td><td>104.6 MiB</td><td>2023-09-28 16:17</td></tr>
+<tr><td><a href="istoreos-22.03.5-2023092209-r4s-squashfs.img.gz" title="istoreos-22.03.5-2023092209-r4s-squashfs.img.gz">istoreos-22.03.5-2023092209-r4s-squashfs.img.gz</a></td><td>104.3 MiB</td><td>2023-09-22 11:07</td></tr>
+<tr><td><a href="istoreos-22.03.5-2023090810-r4s-squashfs.img.gz" title="istoreos-22.03.5-2023090810-r4s-squashfs.img.gz">istoreos-22.03.5-2023090810-r4s-squashfs.img.gz</a></td><td>104.3 MiB</td><td>2023-09-08 11:26</td></tr>
+<tr><td><a href="istoreos-22.03.5-2023082509-r4s-squashfs.img.gz" title="istoreos-22.03.5-2023082509-r4s-squashfs.img.gz">istoreos-22.03.5-2023082509-r4s-squashfs.img.gz</a></td><td>104.3 MiB</td><td>2023-08-25 10:40</td></tr>
+<tr><td><a href="istoreos-22.03.5-2023080410-r4s-squashfs.img.gz" title="istoreos-22.03.5-2023080410-r4s-squashfs.img.gz">istoreos-22.03.5-2023080410-r4s-squashfs.img.gz</a></td><td>104.2 MiB</td><td>2023-08-04 11:13</td></tr>
+<tr><td><a href="istoreos-22.03.5-2023072811-r4s-squashfs.img.gz" title="istoreos-22.03.5-2023072811-r4s-squashfs.img.gz">istoreos-22.03.5-2023072811-r4s-squashfs.img.gz</a></td><td>104.2 MiB</td><td>2023-07-28 11:48</td></tr>
+<tr><td><a href="istoreos-22.03.4-2023071416-r4s-squashfs.img.gz" title="istoreos-22.03.4-2023071416-r4s-squashfs.img.gz">istoreos-22.03.4-2023071416-r4s-squashfs.img.gz</a></td><td>104.2 MiB</td><td>2023-07-14 16:30</td></tr>
+<tr><td><a href="istoreos-22.03.4-2023071411-r4s-squashfs.img.gz" title="istoreos-22.03.4-2023071411-r4s-squashfs.img.gz">istoreos-22.03.4-2023071411-r4s-squashfs.img.gz</a></td><td>104.2 MiB</td><td>2023-07-14 11:48</td></tr>
+<tr><td><a href="istoreos-22.03.4-2023070715-r4s-squashfs.img.gz" title="istoreos-22.03.4-2023070715-r4s-squashfs.img.gz">istoreos-22.03.4-2023070715-r4s-squashfs.img.gz</a></td><td>104.0 MiB</td><td>2023-07-07 15:27</td></tr>
+<tr><td><a href="istoreos-21.02.3-2023060914-r4s-squashfs.img.gz" title="istoreos-21.02.3-2023060914-r4s-squashfs.img.gz">istoreos-21.02.3-2023060914-r4s-squashfs.img.gz</a></td><td>97.4 MiB</td><td>2023-06-09 15:41</td></tr>
+<tr><td><a href="istoreos-21.02.3-2023052616-r4s-squashfs.img.gz" title="istoreos-21.02.3-2023052616-r4s-squashfs.img.gz">istoreos-21.02.3-2023052616-r4s-squashfs.img.gz</a></td><td>97.3 MiB</td><td>2023-05-26 17:12</td></tr>
+<tr><td><a href="istoreos-21.02.3-2023051913-r4s-squashfs.img.gz" title="istoreos-21.02.3-2023051913-r4s-squashfs.img.gz">istoreos-21.02.3-2023051913-r4s-squashfs.img.gz</a></td><td>97.3 MiB</td><td>2023-05-19 13:46</td></tr>
+<tr><td><a href="istoreos-21.02.3-2023051217-r4s-squashfs.img.gz" title="istoreos-21.02.3-2023051217-r4s-squashfs.img.gz">istoreos-21.02.3-2023051217-r4s-squashfs.img.gz</a></td><td>95.9 MiB</td><td>2023-05-12 18:29</td></tr>
+<tr><td><a href="istoreos-21.02.3-2023042111-r4s-squashfs.img.gz" title="istoreos-21.02.3-2023042111-r4s-squashfs.img.gz">istoreos-21.02.3-2023042111-r4s-squashfs.img.gz</a></td><td>95.5 MiB</td><td>2023-04-21 12:21</td></tr>
+<tr><td><a href="istoreos-21.02.3-2023041417-r4s-squashfs.img.gz" title="istoreos-21.02.3-2023041417-r4s-squashfs.img.gz">istoreos-21.02.3-2023041417-r4s-squashfs.img.gz</a></td><td>95.5 MiB</td><td>2023-04-14 18:28</td></tr>
+<tr><td><a href="istoreos-21.02.3-2023040712-r4s-squashfs.img.gz" title="istoreos-21.02.3-2023040712-r4s-squashfs.img.gz">istoreos-21.02.3-2023040712-r4s-squashfs.img.gz</a></td><td>104.2 MiB</td><td>2023-04-07 16:01</td></tr>
+<tr><td><a href="istoreos-21.02.3-2023033111-r4s-squashfs.img.gz" title="istoreos-21.02.3-2023033111-r4s-squashfs.img.gz">istoreos-21.02.3-2023033111-r4s-squashfs.img.gz</a></td><td>104.2 MiB</td><td>2023-03-31 12:08</td></tr>
+<tr><td><a href="istoreos-21.02.3-2023032012-r4s-squashfs.img.gz" title="istoreos-21.02.3-2023032012-r4s-squashfs.img.gz">istoreos-21.02.3-2023032012-r4s-squashfs.img.gz</a></td><td>106.2 MiB</td><td>2023-03-31 14:21</td></tr>
+<tr><td><a href="istoreos-21.02.3-2023032001-r4s-squashfs.img.gz" title="istoreos-21.02.3-2023032001-r4s-squashfs.img.gz">istoreos-21.02.3-2023032001-r4s-squashfs.img.gz</a></td><td>106.2 MiB</td><td>2023-03-31 14:21</td></tr>
+<tr><td><a href="istoreos-21.02.3-2023031922-r4s-squashfs.img.gz" title="istoreos-21.02.3-2023031922-r4s-squashfs.img.gz">istoreos-21.02.3-2023031922-r4s-squashfs.img.gz</a></td><td>106.2 MiB</td><td>2023-03-31 14:21</td></tr>
+<tr><td><a href="istoreos-21.02.3-2023031713-r4s-squashfs.img.gz" title="istoreos-21.02.3-2023031713-r4s-squashfs.img.gz">istoreos-21.02.3-2023031713-r4s-squashfs.img.gz</a></td><td>106.3 MiB</td><td>2023-03-31 14:21</td></tr>
+<tr><td><a href="istoreos-21.02.3-2023031010-r4s-squashfs.img.gz" title="istoreos-21.02.3-2023031010-r4s-squashfs.img.gz">istoreos-21.02.3-2023031010-r4s-squashfs.img.gz</a></td><td>106.3 MiB</td><td>2023-03-31 14:21</td></tr>
+<tr><td><a href="istoreos-21.02.3-2023030414-r4s-squashfs.img.gz" title="istoreos-21.02.3-2023030414-r4s-squashfs.img.gz">istoreos-21.02.3-2023030414-r4s-squashfs.img.gz</a></td><td>106.3 MiB</td><td>2023-03-31 14:21</td></tr>
+<tr><td><a href="istoreos-21.02.3-2023022415-r4s-squashfs.img.gz" title="istoreos-21.02.3-2023022415-r4s-squashfs.img.gz">istoreos-21.02.3-2023022415-r4s-squashfs.img.gz</a></td><td>106.6 MiB</td><td>2023-03-31 14:21</td></tr>
+<tr><td><a href="istoreos-21.02.3-2023021714-r4s-squashfs.img.gz" title="istoreos-21.02.3-2023021714-r4s-squashfs.img.gz">istoreos-21.02.3-2023021714-r4s-squashfs.img.gz</a></td><td>106.4 MiB</td><td>2023-03-31 14:21</td></tr>
+<tr><td><a href="istoreos-21.02.3-2023020315-r4s-squashfs.img.gz" title="istoreos-21.02.3-2023020315-r4s-squashfs.img.gz">istoreos-21.02.3-2023020315-r4s-squashfs.img.gz</a></td><td>106.6 MiB</td><td>2023-03-31 14:21</td></tr>
+<tr><td><a href="istoreos-21.02.3-2022121614-r4s-squashfs.img.gz" title="istoreos-21.02.3-2022121614-r4s-squashfs.img.gz">istoreos-21.02.3-2022121614-r4s-squashfs.img.gz</a></td><td>106.9 MiB</td><td>2023-03-31 14:20</td></tr>
+<tr><td><a href="istoreos-21.02.3-2022120820-r4s-squashfs.img.gz" title="istoreos-21.02.3-2022120820-r4s-squashfs.img.gz">istoreos-21.02.3-2022120820-r4s-squashfs.img.gz</a></td><td>106.5 MiB</td><td>2023-03-31 14:20</td></tr>
+<tr><td><a href="istoreos-21.02.3-2022112305-nanopi-r4s-squashfs.img.gz" title="istoreos-21.02.3-2022112305-nanopi-r4s-squashfs.img.gz">istoreos-21.02.3-2022112305-nanopi-r4s-squashfs.img.gz</a></td><td>104.4 MiB</td><td>2023-03-31 14:20</td></tr>
+<tr><td><a href="istoreos-21.02.3-2022102108-nanopi-r4s-squashfs.img.gz" title="istoreos-21.02.3-2022102108-nanopi-r4s-squashfs.img.gz">istoreos-21.02.3-2022102108-nanopi-r4s-squashfs.img.gz</a></td><td>89.1 MiB</td><td>2023-03-31 14:20</td></tr>
+<tr><td><a href="feeds.conf" title="feeds.conf">feeds.conf</a></td><td>601 B</td><td>2026-11-06 10:50</td></tr>
+<tr><td><a href="feeds.buildinfo" title="feeds.buildinfo">feeds.buildinfo</a></td><td>1.5 KiB</td><td>2026-11-06 11:48</td></tr>
+<tr><td><a href="config.seed" title="config.seed">config.seed</a></td><td>31.4 KiB</td><td>2026-11-06 16:27</td></tr>
+<tr><td><a href="config.buildinfo" title="config.buildinfo">config.buildinfo</a></td><td>31.5 KiB</td><td>2026-11-06 16:27</td></tr>
+<tr><td><a href="commit.buildinfo" title="commit.buildinfo">commit.buildinfo</a></td><td>11 B</td><td>2026-11-06 16:27</td></tr>
+<tr><td><a href="24.10-feeds.conf" title="24.10-feeds.conf">24.10-feeds.conf</a></td><td>601 B</td><td>2026-08-14 12:06</td></tr>
+<tr><td><a href="24.10-feeds.buildinfo" title="24.10-feeds.buildinfo">24.10-feeds.buildinfo</a></td><td>1.4 KiB</td><td>2026-08-14 12:21</td></tr>
+<tr><td><a href="24.10-config.seed" title="24.10-config.seed">24.10-config.seed</a></td><td>29.6 KiB</td><td>2026-08-14 13:29</td></tr>
+<tr><td><a href="24.10-config.buildinfo" title="24.10-config.buildinfo">24.10-config.buildinfo</a></td><td>29.6 KiB</td><td>2026-08-14 13:29</td></tr>
+</tbody></table></div>
+</div>
+</div>
+
+<script type="module" crossorigin src="/theme/dialog/main.js"></script>
+<link rel="stylesheet" href="/theme/dialog/main.css">
+<script>
+    document.getElementById('list').addEventListener("click", function (e) {
+        var link = window.location.pathname;
+        var idx = link.lastIndexOf("/");
+        link = link.substring(0, idx + 1);
+        var target = e.target;
+        var anchor = target.closest && target.closest("td.filename a[href]");
+        if (anchor) {
+            var href = anchor.getAttribute("href") || "";
+			if (href.startsWith('http://') || href.startsWith('https://')) {
+   				href = href.substring(href.indexOf('://')+3);
+    			href = href.substring(href.indexOf('/'));
+			}
+            var download_link = href.charAt(0) === "/" ? href : link + href
+            if (download_link.startsWith("istoreos-") || download_link.endsWith(".img.gz")) {
+                window.$openDownloadDialog(download_link)
+            }
+        }
+    });
+
+</script>
+
+<footer class="footer navbar">
+    <div class="container">
+        <div class="col text-center text-muted text-small text-nowrap">
+            <small>
+                &copy;<a href="//fw.koolcenter.com"><small>KoolCenter 固件下载服务器</small></a>&nbsp;&nbsp;|&nbsp;&nbsp;<a
+                    href="https://beian.miit.gov.cn/" target="_blank"
+                    rel="external nofollow"><small>粤ICP备20024441号</small></a>&nbsp;&nbsp;|&nbsp;&nbsp;固件下载服务器由<a
+                    href="https://www.hypo.cn/?from=ksfw" target=_blank><small>海波云Hypo.cn</small></a>强力驱动
+            </small>
+        </div>
+    </div>
+</footer>
+
+<script type="text/javascript">
+    generateBreadcrumbs();
+    generateList();
+</script>
+<script type="text/javascript">
+    window.firmwareListTools = {
+        getLinkTextNode: function (link) {
+            for (var i = 0; i < link.childNodes.length; i++) {
+                if (link.childNodes[i].nodeType === Node.TEXT_NODE) {
+                    return link.childNodes[i];
+                }
+            }
+            return null;
+        },
+        getDisplayName: function (link) {
+            var textNode = this.getLinkTextNode(link);
+            return textNode ? textNode.nodeValue : (link.textContent || '');
+        },
+        setDisplayName: function (link, value) {
+            var textNode = this.getLinkTextNode(link);
+            if (textNode) {
+                textNode.nodeValue = value;
+            } else {
+                link.insertBefore(document.createTextNode(value), link.firstChild);
+            }
+        }
+    };
+</script>
+<style>
+    #list tr.firmware-highlight {
+        background-color: var(--firmware-highlight-bg, #fff7d6);
+        box-shadow: inset 4px 0 0 var(--firmware-highlight-border, #f59f00);
+    }
+
+    #list tr.firmware-highlight:hover {
+        background-color: var(--firmware-highlight-hover-bg, #ffefbd);
+    }
+
+    #list .firmware-badge {
+        display: inline-block;
+        margin-left: .45rem;
+        padding: .12rem .38rem;
+        border-radius: .25rem;
+        background-color: var(--firmware-badge-bg, #f59f00);
+        color: var(--firmware-badge-color, #211300);
+        font-size: .75rem;
+        font-weight: 700;
+        line-height: 1.2;
+        vertical-align: middle;
+        white-space: nowrap;
+    }
+</style>
+<script type="text/javascript">
+    (function () {
+        'use strict';
+
+        var colorPresets = {
+            orange: {
+                bg: '#fff7d6',
+                hoverBg: '#ffefbd',
+                border: '#f59f00',
+                badgeBg: '#f59f00',
+                badgeColor: '#211300'
+            },
+            green: {
+                bg: '#e9f9ee',
+                hoverBg: '#d8f3df',
+                border: '#2f9e44',
+                badgeBg: '#2f9e44',
+                badgeColor: '#ffffff'
+            },
+            red: {
+                bg: '#fff0f0',
+                hoverBg: '#ffe3e3',
+                border: '#e03131',
+                badgeBg: '#e03131',
+                badgeColor: '#ffffff'
+            }
+        };
+        var fileRules = [
+            { keyword: 'TUF-BE6500_3.0.0.6_102_57143', label: '最新,点击跳转爱发电下载', color: 'green' },
+            { keyword: 'TUF-BE6500_3.0.0.6_102_54701', label: '次新', color: 'yellow' },
+            { keyword: 'TUF-BE3600_V2_3.0.0.6_102_39407', label: '最新 102_39407_R1,点击跳转爱发电下载', color: 'green' },
+            { keyword: 'TUF-BE3600_V2_3.0.0.6_102_39099', label: '次新,免费直接下载', color: 'yellow' },
+            { keyword: 'RT-AX89X_388_33812', label: '最新,点击跳转爱发电下载', color: 'green' },
+            { keyword: 'RT-AX89X_388_33744_R1', label: '次新', color: 'yellow' },
+            { keyword: '102.9_0', label: '最新,点击跳转爱发电下载', color: 'green' },
+            { keyword: '102.8_0_', label: '次新', color: 'yellow' },
+            { keyword: '102.8_0', label: '次新,点击跳转论坛下载', color: 'yellow' },
+            { keyword: 'TUF-AX3000_3004_388.11_0', label: '最新,点击跳转爱发电下载', color: 'green' },
+            { keyword: 'RT-AX92U_3004_388.11_0', label: '最新,点击跳转爱发电下载', color: 'green' },
+            { keyword: 'RT-AXE95Q_3004_388.11_0', label: '最新,点击跳转爱发电下载', color: 'green' },
+            { keyword: 'RT-AX95Q_3004_388.11_0', label: '最新,点击跳转爱发电下载', color: 'green' },
+            { keyword: 'RT-AX82U_3004_388.11_0', label: '最新,点击跳转爱发电下载', color: 'green' },
+            { keyword: 'RT-AX58U_V2_3004_388.11_0', label: '最新,点击跳转爱发电下载', color: 'green' },
+            { keyword: 'RT-AX5400_3004_388.11_0', label: '最新,点击跳转爱发电下载', color: 'green' },
+            { keyword: 'RT-AX82U_V2_3004_388.11_0', label: '最新,点击跳转爱发电下载', color: 'green' },
+            { keyword: 'TUF-AX3000_V2_3004_388.11_0', label: '最新,点击跳转爱发电下载', color: 'green' },
+            { keyword: 'TUF-AX5400_3004_388.11_0', label: '最新,点击跳转爱发电下载', color: 'green' },
+            { keyword: 'RT-AX88U_3004_388.12_2', label: '最新,点击跳转论坛下载', color: 'green' },
+            { keyword: 'RT-AX86U_3004_388.12_2', label: '最新,点击跳转论坛下载', color: 'green' },
+            { keyword: 'RT-AX68U_3004_388.12_2', label: '最新,点击跳转论坛下载', color: 'green' },
+            { keyword: 'GT-AXE11000_3004_388.12_2', label: '最新,点击跳转论坛下载', color: 'green' },
+            { keyword: 'RT-AX58U_3004_388.12_2', label: '最新,点击跳转论坛下载', color: 'green' },
+            { keyword: 'GT-AX11000_3004_388.12_2', label: '最新,点击跳转论坛下载', color: 'green' },
+            { keyword: 'TUF-AX3000_3004_388.10_2', label: '次新', color: 'yellow' },
+            { keyword: 'RT-AX92U_3004_388.10_2', label: '次新', color: 'yellow' },
+            { keyword: 'RT-AXE95Q_3004_388.10_2', label: '次新', color: 'yellow' },
+            { keyword: 'RT-AX95Q_3004_388.10_2', label: '次新', color: 'yellow' },
+            { keyword: 'RT-AX82U_3004_388.10_2', label: '次新', color: 'yellow' },
+            { keyword: 'RT-AX58U_V2_3004_388.10_2', label: '次新', color: 'yellow' },
+            { keyword: 'RT-AX5400_3004_388.10_2', label: '次新', color: 'yellow' },
+            { keyword: 'RT-AX82U_V2_3004_388.10_2', label: '次新', color: 'yellow' },
+            { keyword: 'TUF-AX3000_V2_3004_388.10_2', label: '次新', color: 'yellow' },
+            { keyword: 'TUF-AX5400_3004_388.10_2', label: '次新', color: 'yellow' },
+            { keyword: 'RT-AX88U_3004_388.11_0', label: '次新', color: 'yellow' },
+            { keyword: 'RT-AX86U_3004_388.11_0', label: '次新', color: 'yellow' },
+            { keyword: 'RT-AX68U_3004_388.11_0', label: '次新', color: 'yellow' },
+            { keyword: 'GT-AXE11000_3004_388.11_0', label: '次新', color: 'yellow' },
+            { keyword: 'RT-AX58U_3004_388.11_0', label: '次新', color: 'yellow' },
+            { keyword: 'GT-AX11000_3004_388.11_0', label: '次新', color: 'yellow' },
+            { keyword: 'GT6_388_23145', label: '最新', color: 'green' },
+            { keyword: 'RT-BE58_GO_3.0.0.6_102_39127', label: '最新,点击跳转爱发电下载', color: 'green' },
+            { keyword: 'GS7_PRO_3.0.0.6_102_38498_koolcenter', label: '最新', color: 'green' },
+            { keyword: 'GS7_AIR_3.0.0.6_102_58833_koolcenter', label: '最新,点击跳转论坛下载', color: 'green' },
+            { keyword: 'GS7_3.0.0.6_102_58624_koolcenter', label: '最新,点击跳转爱发电下载', color: 'green' },
+            { keyword: 'GS7_3.0.0.6_102_58273_koolcenter', label: '次新', color: 'yellow' },
+            { keyword: 'RT-AC86U_386_52334', label: '最新,点击跳转爱发电下载', color: 'green' },
+            { keyword: 'RT-AC86U_386_46092', label: '次新', color: 'yellow' },
+            { keyword: 'TUF-AX4200_388_34013', label: '最新,点击跳转爱发电下载', color: 'green' },
+            { keyword: 'TUF-AX4200_388_33147', label: '次新', color: 'yellow' },
+            { keyword: 'GT-AC5300_386_51582', label: '最新,点击跳转爱发电下载', color: 'green' },
+            { keyword: 'GT-AC5300_386_51529', label: '次新', color: 'yellow' },
+            { keyword: 'TX-AX6000_388_34013_koolcenter', label: '最新,点击跳转爱发电下载', color: 'green' },
+            { keyword: 'TX-AX6000_388_33965_R1_koolcenter-20251126-f69c26c', label: '次新', color: 'yellow' },
+            { keyword: 'RT-BE88U_3.0.0.6_102_39256', label: '最新,点击跳转爱发电下载', color: 'green' },
+            { keyword: 'RT-BE86U_3.0.0.6_102_39125_R1', label: '最新,点击跳转爱发电下载', color: 'green' },
+            { keyword: 'GT-BE96_3.0.0.6_102_39099_R1', label: '最新,点击跳转爱发电下载', color: 'green' },
+            { keyword: 'RT-BE58_GO_3.0.0.6_102_38978_koolcenter_', label: '次新', color: 'yellow' },
+            { keyword: 'RT-BE86U_3.0.0.6_102_39125_koolcenter', label: '次新', color: 'yellow' },
+            { keyword: 'GT-BE96_3.0.0.6_102_39099_koolcenter', label: '次新', color: 'yellow' },
+            { keyword: 'RT-BE88U_3.0.0.6_102_39112_koolcenter', label: '次新', color: 'yellow' },
+        ];
+
+        var folderRules = [
+            { path: '/KoolCenter_ASUS_Official_Mod/TUF-BE3600_V2/', label: '2026年11月21日更新', color: 'green' },
+            { path: '/KoolCenter_ASUS_Official_Mod/GS7/', label: '2026年11月18日更新', color: 'green' },
+            { path: '/KoolCenter_ASUS_Official_Mod/TUF-AX4200/', label: '2026年11月18日更新', color: 'green' },
+            { path: '/KoolCenter_ASUS_Official_Mod/RT-AC86U/', label: '养老版本,2026年11月17日更新', color: 'green' },
+            { path: '/KoolCenter_ASUS_Official_Mod/GT-AC5300/', label: '养老版本,2026年11月12日更新', color: 'green' },
+            { path: '/KoolCenter_ASUS_Official_Mod/TX-AX6000/', label: '2026年11月12日更新', color: 'green' },
+            { path: '/KoolCenter_ASUS_Official_Mod/RT-BE86U/', label: '火,2026年5月26日更新', color: 'red' },
+            { path: '/KoolCenter_ASUS_Official_Mod/GT-BE96/', label: '火,2026年5月26日更新', color: 'red' },
+            { path: '/KoolCenter_ASUS_Official_Mod/RT-BE88U/', label: '火,2026年5月26日更新', color: 'red' },
+            { path: '/KoolCenter_ASUS_Official_Mod/ROG 魔盒/', label: '火,mtk,性能神机,2026年11月18日更新', color: 'green' }
+        ];
+
+        function applyColorPreset(row, badge, colorName) {
+            var preset = colorPresets[colorName] || colorPresets.orange;
+            row.style.setProperty('--firmware-highlight-bg', preset.bg);
+            row.style.setProperty('--firmware-highlight-hover-bg', preset.hoverBg);
+            row.style.setProperty('--firmware-highlight-border', preset.border);
+            if (badge) {
+                badge.style.setProperty('--firmware-badge-bg', preset.badgeBg);
+                badge.style.setProperty('--firmware-badge-color', preset.badgeColor);
+            }
+        }
+
+        function getRuleLabels(rule) {
+            var source = Array.isArray(rule.labels) ? rule.labels : String(rule.label || '').split(/[,\uff0c]/);
+            var labels = [];
+            for (var i = 0; i < source.length; i++) {
+                var label = String(source[i]).trim();
+                if (label) {
+                    labels.push(label);
+                }
+            }
+            return labels;
+        }
+
+        function appendBadges(link, labels) {
+            var badges = [];
+            for (var i = 0; i < labels.length; i++) {
+                var badge = document.createElement('span');
+                badge.className = 'firmware-badge';
+                badge.textContent = labels[i];
+                link.appendChild(badge);
+                badges.push(badge);
+            }
+            return badges;
+        }
+
+        function normalizePath(path) {
+            var normalized = path || '';
+            try {
+                normalized = decodeURIComponent(normalized);
+            } catch (e) {
+                normalized = path || '';
+            }
+            if (normalized.charAt(0) !== '/') {
+                normalized = '/' + normalized;
+            }
+            if (normalized.charAt(normalized.length - 1) !== '/') {
+                normalized += '/';
+            }
+            return normalized;
+        }
+
+        function getLinkPath(link) {
+            var parser = document.createElement('a');
+            parser.href = link.getAttribute('href') || '';
+            return normalizePath(parser.pathname);
+        }
+
+        function isFolderRow(row, link) {
+            return !!row.querySelector('i.fa.fa-fw.fa-folder-o') || /\/(?:\?|$)/.test(link.getAttribute('href') || '');
+        }
+
+        function getFolderRule(link) {
+            var linkPath = getLinkPath(link);
+            for (var i = 0; i < folderRules.length; i++) {
+                if (linkPath === normalizePath(folderRules[i].path)) {
+                    return folderRules[i];
+                }
+            }
+            return null;
+        }
+
+        function getFileRule(filename) {
+            for (var i = 0; i < fileRules.length; i++) {
+                if (filename.indexOf(fileRules[i].keyword) !== -1) {
+                    return fileRules[i];
+                }
+            }
+            return null;
+        }
+
+        function decorateRow(row, link, rule) {
+            var labels = getRuleLabels(rule);
+            var badges = link.querySelectorAll('.firmware-badge');
+            if (rule.highlight !== false) {
+                row.classList.add('firmware-highlight');
+            }
+            if (labels.length && !badges.length) {
+                badges = appendBadges(link, labels);
+            }
+            if (!badges.length) {
+                applyColorPreset(row, null, rule.color);
+            }
+            for (var i = 0; i < badges.length; i++) {
+                applyColorPreset(row, badges[i], rule.color);
+            }
+        }
+
+        var rows = document.querySelectorAll('#list tbody tr');
+        for (var i = 0; i < rows.length; i++) {
+            var row = rows[i];
+            var filenameCell = row.querySelector('td.filename');
+            if (!filenameCell) {
+                continue;
+            }
+
+            var link = filenameCell.querySelector('a[href]');
+            if (!link) {
+                continue;
+            }
+
+            var filename = window.firmwareListTools.getDisplayName(link);
+            var rule = isFolderRow(row, link) ? getFolderRule(link) : getFileRule(filename);
+            if (rule) {
+                decorateRow(row, link, rule);
+            }
+        }
+    })();
+</script>
+<script src="/theme/js/jquery.min.js"></script>
+<script src="/theme/js/marked.min.js"></script>
+<script src="/theme/js/prettify.min.js"></script>
+<script src="/theme/js/editormd.js"></script>
+<script>
+    var originUrl = window.location.protocol + "//" + window.location.host
+    var downloadUrl = window.location.protocol + "//fw0.koolcenter.com"
+    var trList = document.querySelectorAll("tbody tr")
+    var file_exclude = ['png', 'html'];
+    for (var i = 0; i < trList.length; i++) {
+        var isDir = trList[i].querySelector("i.fa.fa-fw.fa-folder-o")
+        if (!isDir) {
+            var a = trList[i].querySelector("a[href]")
+            if (a) {
+                var displayName = window.firmwareListTools.getDisplayName(a);
+                var fileName = decodeURIComponent((a.getAttribute("href") || displayName || "").split("/").pop().split("?")[0]);
+                var suffix = fileName.split('.').pop().toLowerCase();
+                if (suffix === 'html') {
+                    window.firmwareListTools.setDisplayName(a, displayName.replace(/\.html$/i, ''));
+                }
+                if (file_exclude.indexOf(suffix) == -1) {
+                    a.href = downloadUrl + a.href.substring(originUrl.length);
+                }
+            }
+        }
+    }
+</script>
+<script>
+    (function () {
+        'use strict';
+        if (location.pathname === "/" || location.pathname.startsWith("/binary/") || location.pathname.startsWith("/iStoreOS/")) {
+            return;
+        }
+
+        document.querySelector('#page-content>.alert').style.display = "";
+    })();
+
+</script>
+<script>var _hmt = _hmt || []; (function () { var hm = document.createElement("script"); hm.src = "//hm.baidu.com/hm.js?ae541fe145c6e7207330437b3b601ba1"; var s = document.getElementsByTagName("script")[0]; s.parentNode.insertBefore(hm, s) })();</script>
+<script type="text/javascript">
+    $(function () {
+        var EditormdView;
+        $.get("README.md?cb=" + Date.now(), function (markdown) {
+            EditormdView = editormd.markdownToHTML("markdown-view", {
+                markdown: markdown,//+ "\r\n" + $("#append-test").text(),
+                //htmlDecode      : true,       // 开启 HTML 标签解析，为了安全性，默认不开启
+                htmlDecode: "style,script,iframe",  // you can filter tags decode
+                //toc             : false,
+                tocm: false,    // Using [TOCM]
+                //tocContainer    : "#custom-toc-container", // 自定义 ToC 容器层
+                //gfm             : false,
+                //tocDropdown     : true,
+                // markdownSourceCode : true, // 是否保留 Markdown 源码，即是否删除保存源码的 Textarea 标签
+                emoji: false,
+                taskList: false,
+                tex: false,  // 默认不解析
+                flowChart: false,  // 默认不解析
+                sequenceDiagram: false,  // 默认不解析
+            });
+            //console.log("返回一个 jQuery 实例 =>", EditormdView);
+            // 获取Markdown源码
+            //console.log(EditormdView.getMarkdown());
+            //alert(EditormdView.getMarkdown());
+        });
+    });
+</script>
+</body>
+
+</html>

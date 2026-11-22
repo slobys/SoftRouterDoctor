@@ -1,0 +1,488 @@
+{
+  "schema_version": 1,
+  "id": "openwrt-25.12.6",
+  "firmware": "OpenWrt",
+  "release": "25.12.6",
+  "channel": "stable",
+  "package_manager": "apk",
+  "url": "https://downloads.openwrt.org/releases/25.12.6/targets/",
+  "checked_at": "2026-11-22",
+  "entries": [
+    {
+      "platform": "apm821xx/nand",
+      "package_arch": "powerpc_464fp",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "apm821xx/sata",
+      "package_arch": "powerpc_464fp",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "armsr/armv7",
+      "package_arch": "arm_cortex-a15_neon-vfpv4",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "armsr/armv8",
+      "package_arch": "aarch64_generic",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "at91/sam9x",
+      "package_arch": "arm_arm926ej-s",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "at91/sama5",
+      "package_arch": "arm_cortex-a5_vfpv4",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "at91/sama7",
+      "package_arch": "arm_cortex-a7_vfpv4",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "ath79/generic",
+      "package_arch": "mips_24kc",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "ath79/mikrotik",
+      "package_arch": "mips_24kc",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "ath79/nand",
+      "package_arch": "mips_24kc",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "ath79/tiny",
+      "package_arch": "mips_24kc",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "bcm27xx/bcm2708",
+      "package_arch": "arm_arm1176jzf-s_vfp",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "bcm27xx/bcm2709",
+      "package_arch": "arm_cortex-a7_neon-vfpv4",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "bcm27xx/bcm2710",
+      "package_arch": "aarch64_cortex-a53",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "bcm27xx/bcm2711",
+      "package_arch": "aarch64_cortex-a72",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "bcm27xx/bcm2712",
+      "package_arch": "aarch64_cortex-a76",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "bcm47xx/generic",
+      "package_arch": "mipsel_mips32",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "bcm47xx/legacy",
+      "package_arch": "mipsel_mips32",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "bcm47xx/mips74k",
+      "package_arch": "mipsel_74kc",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "bcm4908/generic",
+      "package_arch": "aarch64_cortex-a53",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "bcm53xx/generic",
+      "package_arch": "arm_cortex-a9",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "bmips/bcm6318",
+      "package_arch": "mips_mips32",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "bmips/bcm63268",
+      "package_arch": "mips_mips32",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "bmips/bcm6328",
+      "package_arch": "mips_mips32",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "bmips/bcm6358",
+      "package_arch": "mips_mips32",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "bmips/bcm6362",
+      "package_arch": "mips_mips32",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "bmips/bcm6368",
+      "package_arch": "mips_mips32",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "d1/generic",
+      "package_arch": "riscv64_generic",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "gemini/generic",
+      "package_arch": "arm_fa526",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "imx/cortexa53",
+      "package_arch": "aarch64_cortex-a53",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "imx/cortexa7",
+      "package_arch": "arm_cortex-a7_neon-vfpv4",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "imx/cortexa9",
+      "package_arch": "arm_cortex-a9_neon",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "ipq40xx/chromium",
+      "package_arch": "arm_cortex-a7_neon-vfpv4",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "ipq40xx/generic",
+      "package_arch": "arm_cortex-a7_neon-vfpv4",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "ipq40xx/mikrotik",
+      "package_arch": "arm_cortex-a7_neon-vfpv4",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "ipq806x/chromium",
+      "package_arch": "arm_cortex-a15_neon-vfpv4",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "ipq806x/generic",
+      "package_arch": "arm_cortex-a15_neon-vfpv4",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "ixp4xx/generic",
+      "package_arch": "armeb_xscale",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "kirkwood/generic",
+      "package_arch": "arm_xscale",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "lantiq/xrx200",
+      "package_arch": "mips_24kc",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "lantiq/xrx200_legacy",
+      "package_arch": "mips_24kc",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "lantiq/xway",
+      "package_arch": "mips_24kc",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "layerscape/armv7",
+      "package_arch": "arm_cortex-a7_neon-vfpv4",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "layerscape/armv8_64b",
+      "package_arch": "aarch64_generic",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "loongarch64/generic",
+      "package_arch": "loongarch64_generic",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "malta/be",
+      "package_arch": "mips_24kc",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "malta/be64",
+      "package_arch": "mips64_mips64r2",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "malta/le",
+      "package_arch": "mipsel_24kc",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "malta/le64",
+      "package_arch": "mips64el_mips64r2",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "mediatek/filogic",
+      "package_arch": "aarch64_cortex-a53",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "mediatek/mt7622",
+      "package_arch": "aarch64_cortex-a53",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "mediatek/mt7623",
+      "package_arch": "arm_cortex-a7_neon-vfpv4",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "mediatek/mt7629",
+      "package_arch": "arm_cortex-a7",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "microchipsw/lan969x",
+      "package_arch": "aarch64_cortex-a53",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "mpc85xx/p1010",
+      "package_arch": "powerpc_8548",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "mpc85xx/p1020",
+      "package_arch": "powerpc_8548",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "mpc85xx/p2020",
+      "package_arch": "powerpc_8548",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "mvebu/cortexa53",
+      "package_arch": "aarch64_cortex-a53",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "mvebu/cortexa72",
+      "package_arch": "aarch64_cortex-a72",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "mvebu/cortexa9",
+      "package_arch": "arm_cortex-a9_vfpv3-d16",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "mxs/generic",
+      "package_arch": "arm_arm926ej-s",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "octeon/generic",
+      "package_arch": "mips64_octeonplus",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "omap/generic",
+      "package_arch": "arm_cortex-a8_vfpv3",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "pistachio/generic",
+      "package_arch": "mipsel_24kc_24kf",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "qoriq/generic",
+      "package_arch": "powerpc64_e5500",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "qualcommax/ipq50xx",
+      "package_arch": "aarch64_cortex-a53",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "qualcommax/ipq60xx",
+      "package_arch": "aarch64_cortex-a53",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "qualcommax/ipq807x",
+      "package_arch": "aarch64_cortex-a53",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "ramips/mt7620",
+      "package_arch": "mipsel_24kc",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "ramips/mt7621",
+      "package_arch": "mipsel_24kc",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "ramips/mt76x8",
+      "package_arch": "mipsel_24kc",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "ramips/rt305x",
+      "package_arch": "mipsel_24kc",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "ramips/rt3883",
+      "package_arch": "mipsel_74kc",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "realtek/rtl838x",
+      "package_arch": "mips_24kc",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "realtek/rtl839x",
+      "package_arch": "mips_24kc",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "realtek/rtl930x",
+      "package_arch": "mips_24kc",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "realtek/rtl930x_nand",
+      "package_arch": "mips_24kc",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "realtek/rtl931x",
+      "package_arch": "mips_24kc",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "realtek/rtl931x_nand",
+      "package_arch": "mips_24kc",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "rockchip/armv8",
+      "package_arch": "aarch64_generic",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "sifiveu/generic",
+      "package_arch": "riscv64_generic",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "siflower/sf21",
+      "package_arch": "riscv64_generic",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "starfive/generic",
+      "package_arch": "riscv64_generic",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "stm32/stm32mp1",
+      "package_arch": "arm_cortex-a7_neon-vfpv4",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "sunxi/arm926ejs",
+      "package_arch": "arm_arm926ej-s",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "sunxi/cortexa53",
+      "package_arch": "aarch64_cortex-a53",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "sunxi/cortexa7",
+      "package_arch": "arm_cortex-a7_neon-vfpv4",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "sunxi/cortexa8",
+      "package_arch": "arm_cortex-a8_vfpv3",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "tegra/generic",
+      "package_arch": "arm_cortex-a9_vfpv3-d16",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "x86/64",
+      "package_arch": "x86_64",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "x86/generic",
+      "package_arch": "i386_pentium4",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "x86/geode",
+      "package_arch": "i386_pentium-mmx",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "x86/legacy",
+      "package_arch": "i386_pentium-mmx",
+      "abi": "Shell/JS, no project binary ABI"
+    },
+    {
+      "platform": "zynq/generic",
+      "package_arch": "arm_cortex-a9_neon",
+      "abi": "Shell/JS, no project binary ABI"
+    }
+  ],
+  "raw_evidence": [
+    {
+      "path": "evidence/sources/openwrt-25.12.6-index.zip",
+      "sha256": "98d2d4fab4440c4c73e32e2ae5dfbc86364dd746c91e96eaeb57145e5f0ddede"
+    }
+  ]
+}

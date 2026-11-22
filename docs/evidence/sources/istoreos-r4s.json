@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "id": "istoreos-r4s",
+  "firmware": "iStoreOS",
+  "release": "25.12.6 2026110611",
+  "channel": "stable",
+  "package_manager": "apk",
+  "url": "https://fw.koolcenter.com/iStoreOS/r4s/",
+  "checked_at": "2026-11-22",
+  "entries": [
+    {
+      "platform": "rockchip/armv8",
+      "package_arch": "aarch64",
+      "abi": "Shell/JS, no project binary ABI"
+    }
+  ],
+  "raw_evidence": [
+    {
+      "path": "evidence/sources/istoreos-r4s.html",
+      "sha256": "1335da0e5597683d1a47e57bdad07fad0bca541b523d2d5ebbe1aca0d7e21e63"
+    }
+  ]
+}

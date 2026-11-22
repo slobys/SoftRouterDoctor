@@ -10,7 +10,7 @@
 (
   script=$(mktemp /tmp/soft-router-doctor-bootstrap.XXXXXX) || exit 1
   trap 'rm -f "$script"' EXIT
-  url=https://raw.githubusercontent.com/slobys/SoftRouterDoctor/codex/preview/install.sh
+  url=https://raw.githubusercontent.com/slobys/SoftRouterDoctor/refs/heads/codex/preview/install.sh
   if command -v curl >/dev/null 2>&1 &&
     curl -fsSL --proto '=https' --proto-redir '=https' --connect-timeout 8 --max-time 25 -o "$script" "$url"; then
     :
@@ -51,4 +51,4 @@ sh /usr/share/soft-router-doctor/manage.sh --uninstall
 
 ## 兼容和验证
 
-本项目处于开发预览阶段。先验证 NanoPi R4S 的 iStoreOS 25.12.6，其他固件、版本及硬件按实际验证结果记录。安装要求设备有 LuCI、rpcd 和标准 OpenWrt 用户态工具。详见 [验证记录](docs/VALIDATION.md)。
+本项目处于开发预览阶段。已实机验证 NanoPi R4S 的 iStoreOS 25.12.6。其他固件、版本及硬件的验证进度见下方记录。安装要求设备有 LuCI、rpcd 和标准 OpenWrt 用户态工具。详见 [验证记录](docs/VALIDATION.md)。
