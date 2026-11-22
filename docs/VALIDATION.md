@@ -1,6 +1,15 @@
 # 预览版验证记录
 
-## 实机
+## v0.2 软路由体检
+
+2026-11-22，在 NanoPi R4S 的 iStoreOS 25.12.6 实测提交 `9f8bdb29402aa5fff212cf6b9ec5f78ac63da01a`。
+
+- 联网体检显示 16 项通过，分别收到了 IPv4 和 IPv6 HTTPS 响应，并确认了 LAN 的全局 IPv6 前缀分配。仅查本机时显示 11/11，五项公网检查单独标记为未验证。
+- 在真实 LuCI 中用 Chromium 核对了桌面和 390 像素宽视口。验证了阶段状态、分类跳转、问题卡片、证据展开及 JSON 下载。故障界面使用明确标记的 IPv6 超时模拟数据，实机网络保持联通。
+- 在 R4S 的 BusyBox 隔离测试中，复现 DNS 解析失败、仅 IPv6 HTTPS 超时、只有 ULA 的 LAN、IPv4-only、Ping 无应答但 HTTPS 正常，以及几个 DNS 修复拦截情形。
+- 升级前后，network、firewall、dhcp 三份配置的摘要一致。实际路由器的 dnsmasq 保持运行，DNS 启动和复测仍用隔离测试验证。
+
+## v0.1 实机
 
 2026-11-22，在 FriendlyElec NanoPi R4S 上验证。固件为 iStoreOS 25.12.6，构建 2026110611，目标 rockchip/armv8，内核 6.12.112。被测应用和安装器源码提交为 `b841599f2d57bc1ee09a403db4456ddf798f0197`。
 
