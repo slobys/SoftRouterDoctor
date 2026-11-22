@@ -5,6 +5,7 @@ export PATH
 . /usr/share/libubox/jshn.sh
 
 REVISION_FILE=/usr/share/soft-router-doctor/installed
+SAVED_TOPOLOGY_LIB=/usr/lib/soft-router-doctor-topology.sh
 REPAIR_LOCK=/var/lock/soft-router-doctor-repair
 APK_CACHE=/var/cache/apk
 APK_CUSTOM_CACHE=/etc/apk/cache
@@ -19,7 +20,7 @@ field() {
 }
 
 identity() {
-	json_add_string version '0.7.0-dev'
+	json_add_string version '0.8.0-dev'
 	IFS= read -r revision 2>/dev/null < "$REVISION_FILE" || revision=uninstalled
 	json_add_string revision "$revision"
 }
@@ -1435,6 +1436,14 @@ if [ "$1" = accelerate ]; then
 			fi ;;
 	esac
 fi
+
+case "$1" in
+	saved-topology|edit-topology)
+		[ -r "$SAVED_TOPOLOGY_LIB" ] || { repair_result unavailable '接线图组件不可用。'; exit; }
+		. "$SAVED_TOPOLOGY_LIB"
+		if [ "$1" = saved-topology ]; then saved_topology; else shift; edit_saved_topology "$@"; fi
+		exit ;;
+esac
 
 if [ "$1" = topology ] && [ "$#" -le 2 ]; then
 	network_map "$2"

@@ -4,8 +4,17 @@
 'require request';
 'require ui';
 'require dom';
+'require poll';
 
 const networkMap = rpc.declare({ object: 'soft-router-doctor', method: 'networkMap', params: ['peer'], reject: true });
+const savedTopology = rpc.declare({ object: 'soft-router-doctor', method: 'savedTopology', reject: true });
+const editTopology = rpc.declare({
+	object: 'soft-router-doctor', method: 'editTopology',
+	params: ['action', 'revision', 'id', 'address', 'name', 'mode'], reject: true
+});
+const topologyWriteAccess = rpc.declare({
+	object: 'session', method: 'access', params: ['scope', 'object', 'function'], expect: { access: false }
+});
 async function discoverRouters(listenOnly = false) {
 	const response = await request.post(rpc.getBaseURL(), {
 		jsonrpc: '2.0', id: 1, method: 'call',
@@ -109,6 +118,9 @@ const styles = [
 	'.srd-map-path{display:grid;grid-template-columns:minmax(0,.93fr) 24px minmax(0,.83fr) 24px minmax(0,1.27fr);align-items:start;margin:9px 0 12px}.srd-map-node{min-width:0;border:1px solid var(--line);border-radius:12px;background:var(--quiet);padding:12px;overflow-wrap:anywhere}.srd-map-node[data-state="warning"]{border-color:var(--warn)}.srd-map-node[data-state="failed"]{border-color:var(--bad)}',
 	'.srd-map-heading{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 7px;margin:0 0 4px}.srd-root .srd-map-heading .srd-rank-title{margin:0}.srd-map-link{height:1px;margin-top:24px;background:var(--accent);opacity:.65}.srd-map-segments{display:grid;gap:9px}.srd-map-meta{display:block;color:var(--muted);font-size:.8rem}.srd-map-node .srd-map-meta{margin-top:3px}',
 	'.srd-map-outlets{display:grid;gap:4px;margin:6px 0}.srd-map-outlets>div{display:grid;grid-template-columns:auto minmax(0,1fr);gap:7px;font-size:.82rem}.srd-map-outlets dt{font-weight:700}.srd-map-outlets dd{margin:0;color:var(--muted)}',
+	'.srd-saved{margin:2px 0 18px;padding-bottom:14px;border-bottom:1px solid var(--line)}.srd-saved-head{display:flex;justify-content:space-between;align-items:center;gap:8px 12px;flex-wrap:wrap}.srd-saved-head .srd-rank-title{margin:0}.srd-saved-controls{display:flex;align-items:center;flex-wrap:wrap;gap:6px}',
+	'.srd-root .srd-saved-list{list-style:none;margin:8px 0;padding:0}.srd-saved-list>li{display:flex;justify-content:space-between;align-items:center;gap:6px 12px;flex-wrap:wrap;border-top:1px solid var(--line);padding:7px 0}.srd-saved-list strong{overflow-wrap:anywhere}.srd-root .srd-saved-list .srd-button{min-height:40px;padding:6px 10px;font-size:.8rem}',
+	'.srd-saved-form{margin:10px 0;padding:10px 12px;background:var(--quiet);border-radius:8px}.srd-saved-fields{display:flex;flex-wrap:wrap;gap:8px 12px;margin:7px 0 10px}.srd-saved-fields label{display:grid;gap:4px;flex:1 1 150px;min-width:0;font-size:.82rem;color:var(--ink)}.srd-root .srd-saved-fields input,.srd-root .srd-saved-fields select{width:100%;box-sizing:border-box;min-height:40px;min-width:0;color:var(--ink);background:var(--paper);border:1px solid var(--line);border-radius:7px;padding:5px 8px}',
 	'.srd-path-evidence{margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}.srd-path-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:6px 0}.srd-root .srd-path-fact{font-size:.92rem;margin-top:8px}.srd-path-devices{list-style:none;padding:0;margin:4px 0 0}.srd-path-devices li{padding:8px 0;border-top:1px solid var(--line);overflow-wrap:anywhere}.srd-root .srd-path-actions p{margin:0}.srd-mode-label{display:inline-block;margin-inline-start:10px;font-size:.8rem;color:var(--accent);font-weight:600}',
 	'.srd-root .srd-pc-path{display:flex;flex-wrap:wrap;gap:8px;list-style:none;margin:10px 0;padding:0}.srd-pc-path li{display:grid;align-content:start;gap:3px;flex:1 1 136px;min-width:0;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:var(--quiet);overflow-wrap:anywhere}.srd-pc-path li[data-state=unknown]{border-style:dashed;background:transparent}.srd-pc-path strong{font-size:.84rem;color:var(--ink)}.srd-pc-path li span{font-size:.77rem;color:var(--muted)}',
 	'.srd-map-clients{margin:0;padding:0;list-style:none}.srd-map-clients li{display:flex;align-items:baseline;justify-content:space-between;gap:6px;padding:6px 0;border-top:1px solid var(--line)}.srd-map-clients li>div{min-width:0}.srd-map-clients strong{font-size:.87rem}',
@@ -605,6 +617,169 @@ function renderPathEvidence(map, discovery) {
 	return nodes;
 }
 
+const savedModes = { unknown: '待确认', ap: '无线 AP', bridge: '桥接', mesh: 'Mesh', router: '路由' };
+const savedStates = {
+	confirmed: '身份已匹配', updated: 'IP 已同步', unbound: '等待绑定 MAC',
+	ambiguous: '有多个候选 IP', conflict: '录入 IP 已有其他设备', unseen: '暂未找到此 MAC'
+};
+const savedProof = { lease: 'DHCP 租约', neighbor: 'ARP 邻居', both: 'DHCP 与 ARP' };
+
+function savedNetworkDiagram(canEdit) {
+	let snapshot = null;
+	let reading = null;
+	let generation = 0;
+	let writing = false;
+	const status = E('p', { class: 'srd-map-meta', role: 'status' });
+	const diagram = E('div');
+	const entries = E('div');
+	const editor = E('div', { hidden: true, class: 'srd-saved-form' });
+	const add = button('添加路由器', () => openEditor(null, 'save'));
+	const refreshButton = button('刷新地址', () => refresh());
+	const root = E('section', { class: 'srd-saved', 'aria-labelledby': 'srd-saved-title' }, [
+		E('div', { class: 'srd-saved-head' }, [
+			E('h4', { class: 'srd-rank-title', id: 'srd-saved-title' }, '我的接线图'),
+			E('div', { class: 'srd-saved-controls' }, canEdit ? [add, refreshButton] : [refreshButton])
+		]),
+		status, diagram, editor, entries
+	]);
+	add.disabled = true;
+
+	function render() {
+		add.disabled = !snapshot || writing || snapshot.nodes.length >= 24;
+		refreshButton.disabled = writing;
+		if (!snapshot) return;
+		const { nodes } = snapshot;
+		if (!nodes.length) {
+			dom.content(diagram, text('p', canEdit ? '按接线顺序添加路由器。绑定 MAC 后，管理 IP 会自动更新。' :
+				'尚未保存接线图。', 'srd-map-meta'));
+			dom.content(entries, []);
+			return;
+		}
+
+		const steps = [E('li', {}, [text('strong', '本机软路由'), text('span', '接线起点')])];
+		for (const node of nodes) {
+			const caption = node.address || ('录入 IP ' + node.entered);
+			steps.push(E('li', node.address ? {} : { 'data-state': 'unknown' }, [
+				text('strong', node.name), text('span', caption), text('span', savedModes[node.mode] || savedModes.unknown)
+			]));
+		}
+		dom.content(diagram, [
+			text('p', '接线顺序按你的设置显示。', 'srd-map-meta'),
+			E('ol', { class: 'srd-pc-path', 'aria-label': '已保存的接线顺序' }, steps)
+		]);
+		dom.content(entries, E('ul', { class: 'srd-saved-list' }, nodes.map((node, index) => {
+			const facts = [
+				node.address ? '当前 IP ' + node.address : '录入 IP ' + node.entered,
+				savedModes[node.mode], savedStates[node.state], savedProof[node.source]
+			].filter(Boolean);
+			const content = [E('div', {}, [text('strong', node.name), text('span', facts.join(' · '), 'srd-map-meta')])];
+			if (canEdit) {
+				const edit = button('编辑', () => openEditor(node, 'save'));
+				const bind = button(node.mac ? '更换绑定' : '绑定设备', () => openEditor(node, 'bind'));
+				const up = button('上移', () => write('up', snapshot.revision, node.id));
+				const down = button('下移', () => write('down', snapshot.revision, node.id));
+				const remove = button('删除', () => confirmRemove(node, snapshot.revision));
+				up.disabled = writing || index === 0;
+				down.disabled = writing || index === nodes.length - 1;
+				for (const control of [edit, bind, remove]) control.disabled = writing;
+				for (const control of [edit, bind, up, down, remove])
+					control.setAttribute('aria-label', control.textContent + ' ' + node.name);
+				content.push(E('div', { class: 'srd-saved-controls' }, [edit, bind, up, down, remove]));
+			}
+			return E('li', { 'data-node-id': node.id }, content);
+		})));
+	}
+
+	function refresh(force = false) {
+		if ((writing || reading) && !force) return reading;
+		const ticket = ++generation;
+		reading = savedTopology().then(data => {
+			if (ticket !== generation) return;
+			if (!Array.isArray(data?.nodes) || typeof data.revision !== 'string')
+				throw new Error(data?.detail || 'saved topology unavailable');
+			if (force || JSON.stringify(snapshot) !== JSON.stringify(data)) {
+				snapshot = data;
+				render();
+			}
+		}).catch(error => {
+			if (ticket === generation) status.textContent = snapshot ?
+				'暂时无法刷新设备地址。' : '无法读取接线图，请检查拓扑读取权限。';
+			console.error(error);
+		}).finally(() => {
+			if (ticket === generation) reading = null;
+		});
+		return reading;
+	}
+
+	function openEditor(node, action) {
+		if (!snapshot || writing) return;
+		const revision = snapshot.revision;
+		const binding = action === 'bind';
+		const changingAddress = binding || !node;
+		const address = E('input', { type: 'text', inputmode: 'decimal', maxlength: 15,
+			placeholder: '例如 192.168.2.10', value: node?.address || node?.entered || '' });
+		const name = E('input', { type: 'text', maxlength: 32, placeholder: '例如 客厅路由器', value: node?.name || '' });
+		const mode = E('select', {}, Object.entries(savedModes).map(([value, label]) => E('option', { value }, label)));
+		mode.value = node?.mode || 'unknown';
+		const fields = [];
+		if (changingAddress) fields.push(E('label', {}, [text('span', '管理 IPv4 地址'), address]));
+		if (!binding) fields.push(E('label', {}, [text('span', '设备名称'), name]),
+			E('label', {}, [text('span', '工作模式'), mode]));
+		const submit = button(binding ? '确认绑定' : '保存设备', async () => {
+			if (changingAddress && !address.value.trim()) { address.focus(); return; }
+			submit.disabled = true;
+			try {
+				if (await write(action, revision, node?.id || '', address.value.trim(), name.value.trim(), mode.value))
+					editor.hidden = true;
+			} finally {
+				submit.disabled = false;
+			}
+		}, true);
+		dom.content(editor, [
+			text('strong', binding ? '按管理 IP 绑定设备' : node ? '编辑设备信息' : '添加路由器'),
+			binding ? text('p', '请确认这个 IP 当前属于要绑定的路由器。', 'srd-map-meta') : null,
+			E('div', { class: 'srd-saved-fields' }, fields),
+			E('div', { class: 'srd-saved-controls' }, [submit, button('取消', () => { editor.hidden = true; })])
+		].filter(Boolean));
+		editor.hidden = false;
+		(changingAddress ? address : name).focus();
+	}
+
+	function confirmRemove(node, revision) {
+		ui.showModal('从接线图删除设备', [
+			text('p', '删除「' + node.name + '」的接线图记录？'),
+			E('div', { class: 'srd-modal-actions' }, [
+				button('取消', () => ui.hideModal()),
+				button('删除记录', () => { ui.hideModal(); write('remove', revision, node.id); }, true)
+			])
+		]);
+	}
+
+	async function write(action, revision, id, address = '', name = '', mode = 'unknown') {
+		if (writing) return false;
+		writing = true;
+		status.textContent = action === 'save' || action === 'bind' ? '正在保存并核对设备身份…' : '正在保存接线图…';
+		render();
+		try {
+			const result = await editTopology(action, revision, id, address, name, mode);
+			if (!result?.detail) throw new Error('invalid topology save response');
+			if (result.state === 'applied' || result.state === 'stale') await refresh(true);
+			status.textContent = result.detail;
+			if (result.state === 'stale') editor.hidden = true;
+			return result.state === 'applied';
+		} catch (error) {
+			status.textContent = '无法保存接线图，请确认具备拓扑写入权限后重试。';
+			console.error(error);
+			return false;
+		} finally {
+			writing = false;
+			render();
+		}
+	}
+
+	return { root, refresh, hasNodes: () => Boolean(snapshot?.nodes.length) };
+}
+
 function stageItems(states) {
 	const status = { ready: '待检查', running: '检查中', done: '完成', skipped: '未运行', failed: '未完成' };
 	return phases.map((phase, index) => E('li', { 'class': 'srd-step', 'data-state': states[index] }, [
@@ -619,7 +794,11 @@ return view.extend({
 	handleSaveApply: null,
 	handleReset: null,
 
-	render() {
+	load() {
+		return topologyWriteAccess('ubus', 'soft-router-doctor', 'editTopology').catch(() => false);
+	},
+
+	render(canEditTopology) {
 		let report = null;
 		let busy = false;
 		let accelerating = false;
@@ -662,6 +841,7 @@ return view.extend({
 			speedContent
 		]);
 
+		const saved = savedNetworkDiagram(canEditTopology === true);
 		const mapContent = E('div');
 		let latestMap = null;
 		let discovery = null;
@@ -678,13 +858,18 @@ return view.extend({
 					mapButton.focus();
 				})
 			]),
+			saved.root,
 			mapContent,
 			E('section', { 'class': 'srd-path-evidence' }, [
-				text('h4', '接线与工作模式', 'srd-rank-title'),
+				text('h4', '自动发现记录', 'srd-rank-title'),
 				E('div', { 'class': 'srd-path-actions' }, [discoverButton, pathStatus]),
 				pathEvidence
 			])
 		]);
+
+		poll.add(() => {
+			if (!mapPanel.hidden && saved.hasNodes()) return saved.refresh();
+		}, 25);
 
 		function updateTopology(map, health, checking = false) {
 			latestMap = map;
@@ -698,6 +883,7 @@ return view.extend({
 			mapping = true;
 			discovery = null;
 			mapPanel.hidden = false;
+			saved.refresh();
 			mapButton.setAttribute('aria-expanded', 'true');
 			speedPanel.hidden = true;
 			speedButton.setAttribute('aria-expanded', 'false');
@@ -730,6 +916,7 @@ return view.extend({
 					const refreshed = await networkMap(peer).catch(() => null);
 					if (Array.isArray(refreshed?.segments) && Array.isArray(refreshed?.outlets)) latestMap = refreshed;
 					pathStatus.textContent = '自动检测完成。';
+					saved.refresh();
 				} catch (error) {
 					pathStatus.textContent = '设备发现未完成，已保留本机的拓扑信息。';
 					console.error(error);

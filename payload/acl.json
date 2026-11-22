@@ -13,10 +13,15 @@
     }
   },
   "luci-app-soft-router-doctor-topology": {
-    "description": "View local network topology and observed device addresses.",
+    "description": "View local network topology and edit saved route devices with separate write access.",
     "read": {
       "ubus": {
-        "soft-router-doctor": ["networkMap", "discoverRouters"]
+        "soft-router-doctor": ["networkMap", "discoverRouters", "savedTopology"]
+      }
+    },
+    "write": {
+      "ubus": {
+        "soft-router-doctor": ["editTopology"]
       }
     }
   }

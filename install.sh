@@ -19,6 +19,7 @@ fail() {
 layout() {
 	cat <<'FILES'
 payload/doctor|/usr/sbin/soft-router-doctor|755
+payload/topology.sh|/usr/lib/soft-router-doctor-topology.sh|644
 payload/rpc|/usr/libexec/rpcd/soft-router-doctor|755
 payload/acl.json|/usr/share/rpcd/acl.d/luci-app-soft-router-doctor.json|644
 payload/menu.json|/usr/share/luci/menu.d/luci-app-soft-router-doctor.json|644
@@ -168,7 +169,7 @@ prepare_payload() {
 		local_hash=$(sha "$stage/SHA256SUMS") || fail '无法计算本地清单指纹。'
 		revision=local-$local_hash
 	fi
-	for program in payload/doctor payload/rpc install.sh; do
+	for program in payload/doctor payload/topology.sh payload/rpc install.sh; do
 		sh -n "$stage/payload/$program" || fail "Shell 语法错误：$program"
 	done
 }
