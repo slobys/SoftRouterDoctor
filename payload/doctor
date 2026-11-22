@@ -12,13 +12,14 @@ APK_DB_LOCK=/lib/apk/db/lock
 INIT_DIR=/etc/init.d
 RC_DIR=/etc/rc.d
 OPTIMIZE_LOCK=/var/lock/soft-router-doctor-optimization
+LEASE_FILE=/tmp/dhcp.leases
 
 field() {
 	printf '%s\n' "$1" | jsonfilter -e "$2" 2>/dev/null
 }
 
 identity() {
-	json_add_string version '0.4.0-dev'
+	json_add_string version '0.5.0-dev'
 	IFS= read -r revision 2>/dev/null < "$REVISION_FILE" || revision=uninstalled
 	json_add_string revision "$revision"
 }
@@ -872,6 +873,197 @@ apply_service_optimization() (
 	fi
 )
 
+valid_interface_name() {
+	case "$1" in ''|*[!A-Za-z0-9_.:@-]*) return 1 ;; *) return 0 ;; esac
+}
+
+if_device_status() {
+	valid_interface_name "$1" || return 1
+	ubus -S call network.device status "{\"name\":\"$1\"}" 2>/dev/null
+}
+
+local_interfaces() {
+	local zone
+	printf '%s\n' lan guest guests iot
+	for zone in $(uci -q show firewall | sed -n "s/^\(firewall\..*\)\.name='\(lan\|guest\|guests\|iot\)'$/\1/p"); do
+		uci -q get "$zone.network" | tr ' ' '\n'
+	done
+}
+
+route_outlet() {
+	local family="$1" routes selected dev gateway count readable=0
+	routes=$(ip "-$family" route show default 2>/dev/null) && readable=1
+	json_add_object ''
+	json_add_string family "$family"
+	json_add_boolean readable "$readable"
+	selected=$(printf '%s\n' "$routes" | awk '$1 == "default" {
+			dev = gateway = ""; metric = 0
+			for (i = 2; i < NF; i++) {
+				if ($i == "dev" && !dev) dev = $(i+1)
+				if ($i == "via" && !gateway) gateway = $(i+1)
+				if ($i == "metric") metric = $(i+1) + 0
+			}
+			if (!found || metric < best) { d = dev; g = gateway; best = metric; found = 1 }
+			count++
+	} END { if (found) printf "%s|%s|%d\n", d,g,count }')
+	if [ "$readable" -eq 1 ] && [ -n "$selected" ]; then
+		IFS='|' read -r dev gateway count <<EOF
+$selected
+EOF
+		json_add_boolean present 1
+		json_add_string device "$dev"
+		json_add_string gateway "$gateway"
+		json_add_int route_count "$count"
+	else
+		json_add_boolean present 0
+	fi
+	json_close_object
+}
+
+collect_lan_clients() {
+	local device="$1" address="$2" mask="$3" root="$4" leases
+	leases=$LEASE_FILE
+	[ -r "$leases" ] || leases=/dev/null
+	ip neigh show dev "$device" > "$root/neighbors" 2>/dev/null || :
+	LC_ALL=C awk -v base="$address" -v mask="$mask" -v now="$(date +%s)" '
+	function ipv4(s, a, i, x) {
+		if (split(s, a, "\\.") != 4) return -1
+		for (i = 1; i <= 4; i++) {
+			if (a[i] !~ /^[0-9]+$/ || a[i] > 255) return -1
+			x = x * 256 + a[i]
+		}
+		return x
+	}
+	function macok(s, a, i) {
+		if (split(s, a, ":") != 6) return 0
+		for (i = 1; i <= 6; i++) if (a[i] !~ /^[0-9a-f][0-9a-f]$/) return 0
+		return 1
+	}
+	BEGIN {
+		block = 0
+		if (base != "" && mask ~ /^[0-9]+$/ && mask <= 32 && ipv4(base) >= 0)
+			block = 2 ^ (32-mask)
+	}
+	FILENAME == ARGV[1] {
+		mac = tolower($2)
+		actual = ipv4($3)
+		if (!block || actual < 0 || int(actual/block) != int(ipv4(base)/block) ||
+			$1 !~ /^[0-9]+$/ || ($1 != 0 && $1 < now) || !macok(mac)) next
+		key[mac] = 1
+		ip4[mac] = $3
+		host[mac] = $4 == "*" ? "" : $4
+		gsub(/\|/, "", host[mac])
+		leaseip[$3] = mac
+		leased[mac] = 1
+		next
+	}
+	{
+		address = $1; state = $NF; mac = ""
+		for (i = 2; i < NF; i++) if ($i == "lladdr") mac = tolower($(i+1))
+		if (state == "FAILED" || state == "INCOMPLETE") {
+			if (!macok(mac)) mac = leaseip[address]
+			if (macok(mac)) { key[mac] = 1; unresolved[mac] = 1 }
+			next
+		}
+		if (!macok(mac) || state !~ /^(REACHABLE|STALE|DELAY|PROBE|PERMANENT)$/) next
+		key[mac] = observed[mac] = 1
+		if (state == "REACHABLE") reachable[mac] = 1
+		if (ipv4(address) >= 0) ip4[mac] = address
+		else if (address ~ /:/ && (!ip6[mac] || tolower(ip6[mac]) ~ /^fe80:/))
+			ip6[mac] = address
+	}
+	END {
+		for (mac in key) {
+			if (reachable[mac]) { state = "recent"; priority = 1 }
+			else if (observed[mac]) { state = "known"; priority = 2 }
+			else if (unresolved[mac]) { state = "unresolved"; priority = 0 }
+			else { state = "lease"; priority = 3 }
+			printf "%d|%s|%s|%s|%s|%s\n", priority,state,ip4[mac],ip6[mac],substr(host[mac],1,64),substr(mac,13)
+		}
+	}' "$leases" "$root/neighbors" | LC_ALL=C sort | cut -d '|' -f 2- > "$root/clients"
+}
+
+add_lan_segment() {
+	local name="$1" root="$2" if_data device dev_data address mask port state host addr4 addr6 tail
+	if_data=$(ubus -S call "network.interface.$name" status 2>/dev/null) || return 0
+	device=$(field "$if_data" '@.l3_device')
+	[ -n "$device" ] || device=$(field "$if_data" '@.device')
+	valid_interface_name "$device" || device=
+	if [ -n "$device" ]; then
+		case " $shown_devices " in *" $device "*) return 0 ;; esac
+		shown_devices="$shown_devices $device"
+	fi
+	dev_data=$(if_device_status "$device")
+	address=$(field "$if_data" '@["ipv4-address"][0].address')
+	mask=$(field "$if_data" '@["ipv4-address"][0].mask')
+	json_add_object ''
+	json_add_string id "$name"
+	json_add_string device "$device"
+	json_add_string up "$(field "$if_data" '@.up')"
+	json_add_string carrier "$(field "$dev_data" '@.carrier')"
+	json_add_string gateway "${address:+$address/$mask}"
+	json_add_array ports
+	for port in $(field "$dev_data" '@["bridge-members"][*]'); do
+		valid_interface_name "$port" || continue
+		json_add_object ''
+		json_add_string name "$port"
+		json_add_string carrier "$(field "$(if_device_status "$port")" '@.carrier')"
+		json_close_object
+	done
+	json_close_array
+
+	: > "$root/clients"
+	if [ -n "$device" ]; then collect_lan_clients "$device" "$address" "$mask" "$root"; fi
+	json_add_int client_count "$(awk 'END{print NR + 0}' "$root/clients")"
+	json_add_array clients
+	head -n 48 "$root/clients" > "$root/visible"
+	while IFS='|' read -r state addr4 addr6 host tail; do
+		json_add_object ''
+		json_add_string state "$state"
+		json_add_string address "$addr4"
+		json_add_string ipv6 "$addr6"
+		json_add_string host "$host"
+		json_add_string mac_tail "$tail"
+		json_close_object
+	done < "$root/visible"
+	json_close_array
+	json_close_object
+}
+
+network_map() (
+	root=$(mktemp -d /tmp/soft-router-doctor-topology.XXXXXX) || {
+		repair_result unavailable '暂时无法创建本机拓扑采集结果。'
+		exit
+	}
+	trap 'rm -rf "$root"' EXIT
+	trap 'exit 1' HUP INT TERM
+	board=$(ubus -S call system board 2>/dev/null)
+	wan=$(ubus -S call network.interface.wan status 2>/dev/null)
+	wan_device=$(field "$wan" '@.device')
+	json_init
+	json_add_string model "$(field "$board" '@.model')"
+	json_add_string timestamp "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+	json_add_string wan_device "$wan_device"
+	json_add_string wan_l3 "$(field "$wan" '@.l3_device')"
+	json_add_string wan_protocol "$(field "$wan" '@.proto')"
+	json_add_string wan_carrier "$(field "$(if_device_status "$wan_device")" '@.carrier')"
+	json_add_array outlets
+	route_outlet 4
+	route_outlet 6
+	json_close_array
+	json_add_array segments
+	shown_devices=
+	{
+		printf '%s\n' lan
+		local_interfaces | LC_ALL=C sort -u | grep -vx lan
+	} > "$root/interfaces"
+	while IFS= read -r iface; do
+		valid_interface_name "$iface" && add_lan_segment "$iface" "$root"
+	done < "$root/interfaces"
+	json_close_array
+	json_dump
+)
+
 if [ "$1" = optimize-service ] && [ "$#" -eq 5 ]; then
 	apply_service_optimization "$2" "$3" "$4" "$5"
 	exit
@@ -892,8 +1084,9 @@ fi
 
 case "$*" in
 	scan) scan online ;;
+	topology) network_map ;;
 	'scan --local') scan local ;;
 	status) json_init; identity; json_dump ;;
 	'fix-dns --confirm') repair_dns ;;
-	*) echo 'Usage: soft-router-doctor {scan [--local]|status|fix-dns --confirm|accelerate [--apply TOKEN]}' >&2; exit 2 ;;
+	*) echo 'Usage: soft-router-doctor {scan [--local]|topology|status|fix-dns --confirm|accelerate [--apply TOKEN]}' >&2; exit 2 ;;
 esac

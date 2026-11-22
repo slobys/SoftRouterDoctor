@@ -2,9 +2,11 @@
 
 case "$1:$2" in
 	list:)
-		printf '%s\n' '{"status":{},"scan":{},"scanLocal":{},"repairDns":{"confirm":true},"accelerationPlan":{},"applyAcceleration":{"confirm":true,"token":""},"optimizeService":{"confirm":true,"service":"","token":"","stop":true,"disable":true}}' ;;
+		printf '%s\n' '{"status":{},"networkMap":{},"scan":{},"scanLocal":{},"repairDns":{"confirm":true},"accelerationPlan":{},"applyAcceleration":{"confirm":true,"token":""},"optimizeService":{"confirm":true,"service":"","token":"","stop":true,"disable":true}}' ;;
 	call:status)
 		exec /usr/sbin/soft-router-doctor status ;;
+	call:networkMap)
+		exec /usr/sbin/soft-router-doctor topology ;;
 	call:scan)
 		exec /usr/sbin/soft-router-doctor scan ;;
 	call:scanLocal)

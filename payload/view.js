@@ -4,6 +4,7 @@
 'require ui';
 'require dom';
 
+const networkMap = rpc.declare({ object: 'soft-router-doctor', method: 'networkMap', reject: true });
 const scan = rpc.declare({ object: 'soft-router-doctor', method: 'scan', reject: true });
 const scanLocal = rpc.declare({ object: 'soft-router-doctor', method: 'scanLocal', reject: true });
 const repairDns = rpc.declare({
@@ -94,6 +95,11 @@ const styles = [
 	'.srd-rank-list,.srd-service-results,.srd-service-list{padding:0;margin:0;list-style:none}.srd-rank-list li{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:baseline;gap:8px;padding:5px 0;border-top:1px solid var(--line);line-height:1.5}.srd-rank-list li span:first-child{overflow-wrap:anywhere}.srd-rank-list small{color:var(--muted);margin-inline-start:6px}.srd-rank-value{color:var(--accent);font-weight:700;font-variant-numeric:tabular-nums}',
 	'.srd-service-list li{padding:10px 0;border-top:1px solid var(--line)}.srd-service-heading{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 10px}.srd-service-actions{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:3px}.srd-service-toggle{display:inline-flex;align-items:center;gap:6px;min-height:44px;cursor:pointer}.srd-service-toggle input{margin:0;accent-color:var(--accent)}.srd-service-toggle input:focus-visible{outline:2px solid var(--accent);outline-offset:3px}',
 	'.srd-root .srd-service-controls{margin:10px 0 14px}.srd-startups{color:var(--muted);font-size:.8rem;overflow-wrap:anywhere}.srd-service-results li{margin-bottom:5px}',
+	'.srd-map-path{display:grid;grid-template-columns:minmax(0,.93fr) 24px minmax(0,.83fr) 24px minmax(0,1.27fr);align-items:start;margin:9px 0 12px}.srd-map-node{min-width:0;border:1px solid var(--line);border-radius:12px;background:var(--quiet);padding:12px;overflow-wrap:anywhere}.srd-map-node[data-state="warning"]{border-color:var(--warn)}.srd-map-node[data-state="failed"]{border-color:var(--bad)}',
+	'.srd-map-heading{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 7px;margin:0 0 4px}.srd-root .srd-map-heading .srd-rank-title{margin:0}.srd-map-link{height:1px;margin-top:24px;background:var(--accent);opacity:.65}.srd-map-segments{display:grid;gap:9px}.srd-map-meta{display:block;color:var(--muted);font-size:.8rem}.srd-map-node .srd-map-meta{margin-top:3px}',
+	'.srd-map-outlets{display:grid;gap:4px;margin:6px 0}.srd-map-outlets>div{display:grid;grid-template-columns:auto minmax(0,1fr);gap:7px;font-size:.82rem}.srd-map-outlets dt{font-weight:700}.srd-map-outlets dd{margin:0;color:var(--muted)}',
+	'.srd-map-clients{margin:0;padding:0;list-style:none}.srd-map-clients li{display:flex;align-items:baseline;justify-content:space-between;gap:6px;padding:6px 0;border-top:1px solid var(--line)}.srd-map-clients li>div{min-width:0}.srd-map-clients strong{font-size:.87rem}',
+	'@media(max-width:960px){.srd-map-path{grid-template-columns:minmax(0,1fr)}.srd-map-link{height:14px;width:1px;margin:0 23px}.srd-map-node,.srd-map-segments{width:100%}}',
 	'@media(max-width:560px){.srd-accel{padding:12px}.srd-accel-stat{padding:8px}.srd-accel-stat dt{font-size:.73rem}.srd-accel-stat dd{font-size:.92rem}.srd-ranks{grid-template-columns:1fr}.srd-service-toggle{font-size:.85rem}}',
 	'.srd-root .srd-group-link{display:flex;justify-content:space-between;align-items:center;width:100%;min-height:49px;gap:8px;padding:9px 13px;text-align:left;border:0;border-radius:0;background:var(--paper);color:var(--ink);font:inherit;font-weight:650;cursor:pointer}',
 	'.srd-root .srd-group-link:hover{background:var(--quiet)}.srd-root .srd-group-link:focus-visible{outline-offset:-3px}.srd-group-link+.srd-group-link{border-top:1px solid var(--line)}',
@@ -340,6 +346,128 @@ function renderAcceleration(plan, result, confirm, onOptimize, serviceResults) {
 	return nodes;
 }
 
+function mapHeading(title, status, description) {
+	return E('div', { 'class': 'srd-map-heading' }, [
+		text('h4', title, 'srd-rank-title'), chip(status, description)
+	]);
+}
+
+function mapHealth(topology, report) {
+	const checks = new Map((report?.checks || []).map(check => [check.id, check]));
+	const state = id => checks.get(id)?.state;
+	const active = topology.outlets.filter(item => item.present);
+	const dnsFailed = state('dns') === 'warning';
+	const pastWeb = ['https_v4', 'https_v6'].filter(id => state(id) === 'passed').length;
+	const failedWeb = ['https_v4', 'https_v6'].filter(id => state(id) === 'warning').length;
+	const carrierDown = topology.wan_carrier === 'false';
+	const missingOutlet = !active.length && topology.outlets.every(item => item.readable);
+	let outlet = { state:'skipped', label:'待测公网', detail:'显示路由器主路由表中的默认出口。' };
+	if (missingOutlet) {
+		outlet = { state:'failed', label:carrierDown ? 'WAN 无链路' : '未找到默认出口',
+			detail:carrierDown ? '先检查 WAN 网线和上级设备。' : '检查上网接口和默认路由。自定义策略路由需单独核对。' };
+	} else if (carrierDown && active.some(item => item.device === topology.wan_l3 || item.device === topology.wan_device)) {
+		outlet = { state:'failed', label:'WAN 无链路', detail:'当前默认出口的 WAN 设备未报告载波。' };
+	} else if (pastWeb && failedWeb) {
+		outlet = { state:'warning', label:state('https_v6') === 'warning' ? 'IPv6 网页需核对' : 'IPv4 网页需核对',
+			detail:checks.get(state('https_v6') === 'warning' ? 'https_v6' : 'https_v4').detail };
+	} else if (pastWeb) {
+		outlet = { state:'passed', label:pastWeb === 2 ? '双栈网页可达' : '网页探测通过', detail:'路由器收到了测试站点的 HTTPS 响应。' };
+	} else if (dnsFailed) {
+		outlet = { state:'skipped', label:'先检查 DNS', detail:'解析未通过，暂不能单独判断公网网页链路。' };
+	} else if (failedWeb) {
+		outlet = { state:'warning', label:'网页探测需核对',
+			detail:checks.get(state('https_v4') === 'warning' ? 'https_v4' : 'https_v6').detail };
+	} else if (active.length && report) {
+		outlet = { state:'skipped', label:'已识别出口', detail:'本轮没有通过网页访问探测。' };
+	}
+	let dns = { state:'skipped', label:'DNS 待测', detail:'联网体检完成后显示实际解析结果。' };
+	if (state('dnsmasq') === 'failed') {
+		dns = { state:'failed', label:'DNS 服务异常', detail:checks.get('dnsmasq').detail };
+	} else if (dnsFailed) {
+		dns = { state:missingOutlet ? 'warning' : 'failed', label:'DNS 解析失败',
+			detail:missingOutlet ? '缺少默认出口，请先排查上游。' : (report.findings || []).find(finding =>
+				finding.id === 'dns_resolution')?.advice || checks.get('dns').detail };
+	} else if (state('dns') === 'passed') {
+		dns = { state:'passed', label:'DNS 解析通过', detail:checks.get('dns').detail };
+	}
+	return { active, outlet, dns, checks };
+}
+
+function renderMapSegment(segment, prefixCheck, open) {
+	let status = { state:'skipped', label:'接口状态未确认' };
+	if (segment.up === 'false' || segment.carrier === 'false')
+		status = { state:segment.id === 'lan' ? 'failed' : 'warning', label:segment.up === 'false' ? '接口未运行' : '无链路' };
+	else if (segment.id === 'lan' && prefixCheck?.state === 'warning')
+		status = { state:'warning', label:'IPv6 分配需核对' };
+	else if (segment.up === 'true') status = { state:'passed', label:'接口运行中' };
+
+	const clientState = {
+		recent: ['passed','近期有响应'], known: ['skipped','有邻居记录'],
+		lease: ['skipped','仅有租约'], unresolved: ['warning','邻居解析未确认']
+	};
+	const portLine = segment.ports.map(port => port.name +
+		(port.carrier === 'false' ? '（无载波）' : port.carrier === 'true' ? '（有载波）' : '')).join(' · ');
+	return E('article', { 'class': 'srd-map-node', 'data-state': status.state }, [
+		mapHeading(segment.id === 'lan' ? '家庭局域网' : segment.id, status.state, status.label),
+		text('p', [segment.device, segment.gateway].filter(Boolean).join(' · ') || '地址或设备尚未确认', 'srd-accel-copy'),
+		portLine ? text('p', '桥接端口：' + portLine, 'srd-map-meta') : '',
+		segment.id === 'lan' && prefixCheck?.state === 'warning' ? text('p', prefixCheck.detail, 'srd-map-meta') : '',
+		segment.clients.length ? E('details', { 'class': 'srd-evidence', 'data-segment': segment.id, 'open': open || null }, [
+			text('summary', '查看设备（' + segment.client_count + '）'),
+			E('ul', { 'class': 'srd-map-clients' }, segment.clients.map(client => {
+				const [tone, label] = clientState[client.state] || clientState.known;
+				const address = client.address || client.ipv6;
+				return E('li', {}, [
+					E('div', {}, [text('strong', client.host || address || '未知设备'),
+						text('span', client.host && address ? address : 'MAC 尾号 ' + client.mac_tail, 'srd-map-meta')]),
+					chip(tone, label)
+				]);
+			})),
+			segment.client_count > segment.clients.length ? text('p', '显示前 ' + segment.clients.length + ' 台设备。', 'srd-map-meta') : ''
+		]) : text('p', '尚未观察到设备记录。', 'srd-map-meta')
+	]);
+}
+
+function renderNetworkMap(map, report, checking, expanded = new Set()) {
+	const { active, outlet, dns, checks } = mapHealth(map, report);
+	const bypass = active.some(item => map.segments.some(segment => segment.device && segment.device === item.device));
+	const outlets = map.outlets.map(item => {
+		let description = '未发现默认路由';
+		if (!item.readable) description = '未能读取默认路由';
+		else if (item.present) description = [item.device || '设备待核对', item.gateway].filter(Boolean).join(' · ');
+		if (item.route_count > 1) description += '（共 ' + item.route_count + ' 条默认路由）';
+		return E('div', {}, [ text('dt', 'IPv' + item.family), text('dd', description) ]);
+	});
+	return [
+		E('div', { 'class': 'srd-map-path' }, [
+			E('article', { 'class': 'srd-map-node', 'data-state': outlet.state }, [
+				mapHeading('上游出口', outlet.state, outlet.label),
+				E('dl', { 'class': 'srd-map-outlets' }, outlets),
+				map.wan_protocol === 'pppoe' && !bypass ? text('p', 'PPPoE 拨号' + (map.wan_device ? ' · ' + map.wan_device : ''), 'srd-map-meta') : '',
+				bypass ? text('p', '默认出口经过 LAN，可能是旁路由或单臂接入。', 'srd-map-meta') : '',
+				text('p', outlet.detail, 'srd-accel-copy')
+			]),
+			E('div', { 'class': 'srd-map-link', 'aria-hidden': 'true' }),
+			E('article', { 'class': 'srd-map-node', 'data-state': dns.state }, [
+				mapHeading('本机路由器', dns.state, dns.label),
+				text('p', map.model || '软路由', 'srd-accel-copy'),
+				text('p', dns.detail, 'srd-map-meta')
+			]),
+			E('div', { 'class': 'srd-map-link', 'aria-hidden': 'true' }),
+			E('div', { 'class': 'srd-map-segments' }, map.segments.length ?
+				map.segments.map(segment => renderMapSegment(segment, checks.get('lan_prefix'), expanded.has(segment.id))) : [
+					E('article', { 'class': 'srd-map-node' }, [
+						mapHeading('局域网络', 'skipped', '未识别'),
+						text('p', '未读到常用 LAN 接口。自定义接口可能分在其他防火墙区域。', 'srd-accel-copy')
+					])
+				])
+		]),
+		E('p', { 'class': 'srd-map-meta', 'role': 'status' }, checking ? '正在复测 DNS 和公网链路…' :
+			report ? '设备来自本机邻居表与 DHCP 租约。AP 或交换机之后的物理连接需要从对应设备确认。' :
+				'本轮公网检查未返回，图中保留了路由器已读取的结构。')
+	];
+}
+
 function stageItems(states) {
 	const status = { ready: '待检查', running: '检查中', done: '完成', skipped: '未运行', failed: '未完成' };
 	return phases.map((phase, index) => E('li', { 'class': 'srd-step', 'data-state': states[index] }, [
@@ -358,6 +486,7 @@ return view.extend({
 		let report = null;
 		let busy = false;
 		let accelerating = false;
+		let mapping = false;
 		let repairInFlight = false;
 		let progress = ['ready', 'ready'];
 		const live = E('div', { 'class': 'srd-sr', 'role': 'status', 'aria-live': 'polite' });
@@ -375,6 +504,9 @@ return view.extend({
 		const local = button('只查本机', () => runScan(true));
 		const exportButton = button('下载报告', () => { if (report) downloadReport(report); });
 		const speedButton = button('一键加速', () => runAcceleration());
+		const mapButton = button('网络拓扑', () => runTopology());
+		mapButton.setAttribute('aria-controls', 'srd-network-map');
+		mapButton.setAttribute('aria-expanded', 'false');
 		speedButton.setAttribute('aria-controls', 'srd-accel');
 		speedButton.setAttribute('aria-expanded', 'false');
 
@@ -392,6 +524,48 @@ return view.extend({
 			]),
 			speedContent
 		]);
+
+		const mapContent = E('div');
+		const mapPanel = E('section', { 'class': 'srd-accel', 'id': 'srd-network-map',
+			'aria-labelledby': 'srd-network-map-title', 'hidden': true }, [
+			E('div', { 'class': 'srd-accel-top' }, [
+				E('h3', { 'class': 'srd-section-title', 'id': 'srd-network-map-title' }, '家庭网络拓扑'),
+				button('收起', () => {
+					mapPanel.hidden = true;
+					mapButton.setAttribute('aria-expanded', 'false');
+					mapButton.focus();
+				})
+			]),
+			mapContent
+		]);
+
+		async function runTopology() {
+			if (busy || accelerating || mapping) return;
+			mapping = true;
+			mapPanel.hidden = false;
+			mapButton.setAttribute('aria-expanded', 'true');
+			speedPanel.hidden = true;
+			speedButton.setAttribute('aria-expanded', 'false');
+			dom.content(mapContent, E('p', { 'role': 'status' }, '正在读取接口、默认路由与设备记录。'));
+			update();
+			try {
+				const map = await networkMap();
+				if (!Array.isArray(map?.outlets) || !Array.isArray(map.segments))
+					throw new Error('invalid network map');
+				dom.content(mapContent, renderNetworkMap(map, null, true));
+				const health = await scan().catch(() => null);
+				const expanded = new Set([...mapContent.querySelectorAll('details[open]')].map(item => item.dataset.segment));
+				dom.content(mapContent, renderNetworkMap(map, health, false, expanded));
+			}
+			catch (error) {
+				dom.content(mapContent, E('p', { 'role': 'status' }, '无法读取拓扑。请重新登录或核对拓扑查看权限。'));
+				console.error(error);
+			}
+			finally {
+				mapping = false;
+				update();
+			}
+		}
 
 		function confirmOptimization(items) {
 			ui.showModal('确认优化选中项', [
@@ -411,8 +585,10 @@ return view.extend({
 		}
 
 		async function runAcceleration(plan, items = []) {
-			if (busy || accelerating) return;
+			if (busy || accelerating || mapping) return;
 			accelerating = true;
+			mapPanel.hidden = true;
+			mapButton.setAttribute('aria-expanded', 'false');
 			speedPanel.hidden = false;
 			speedButton.setAttribute('aria-expanded', 'true');
 			dom.content(speedContent, E('p', { 'role': 'status', 'class': 'srd-accel-copy' },
@@ -464,8 +640,8 @@ return view.extend({
 
 		function update() {
 			primary.textContent = busy ? (repairInFlight ? '正在修复' : '体检中') : report ? '重新体检' : '开始体检';
-			primary.disabled = local.disabled = speedButton.disabled = busy || accelerating;
-			exportButton.disabled = busy || accelerating || !report;
+			primary.disabled = local.disabled = speedButton.disabled = mapButton.disabled = busy || accelerating || mapping;
+			exportButton.disabled = busy || accelerating || mapping || !report;
 			dom.content(steps, stageItems(progress));
 
 			if (busy) {
@@ -495,7 +671,7 @@ return view.extend({
 			}
 
 			if (report) {
-				const fix = !busy && !accelerating && report.can_start_dnsmasq && L.hasViewPermission() ? showConfirmation : null;
+				const fix = !busy && !accelerating && !mapping && report.can_start_dnsmasq && L.hasViewPermission() ? showConfirmation : null;
 				dom.content(results, renderReport(report, fix));
 			}
 		}
@@ -508,7 +684,7 @@ return view.extend({
 		}
 
 		async function runScan(localOnly, keepNotice) {
-			if (busy || accelerating) return;
+			if (busy || accelerating || mapping) return;
 			busy = true;
 			progress = [ 'running', localOnly ? 'skipped' : 'ready' ];
 			if (!keepNotice) setNotice('');
@@ -545,7 +721,7 @@ return view.extend({
 		}
 
 		function showConfirmation() {
-			if (busy || accelerating) return;
+			if (busy || accelerating || mapping) return;
 			ui.showModal('启动 dnsmasq 并复测', [
 				text('p', '启动会使用路由器现有的 DNS 和 DHCP 配置。继续前，请确认这台设备负责对应服务。'),
 				E('div', { 'class': 'right' }, [
@@ -558,7 +734,7 @@ return view.extend({
 
 		async function runRepair() {
 			ui.hideModal();
-			if (busy || accelerating) return;
+			if (busy || accelerating || mapping) return;
 			const localOnly = report.mode === 'local';
 			busy = repairInFlight = true;
 			summary.textContent = '正在启动 DNS 服务并验证实际解析。';
@@ -588,12 +764,12 @@ return view.extend({
 					E('div', { 'class': 'srd-hero-intro' }, [
 						E('h2', { 'class': 'srd-title', 'id': 'srd-page-title' }, '软路由体检'), summary
 					]),
-					E('div', { 'class': 'srd-actions' }, [ primary, local, speedButton, exportButton ]),
+					E('div', { 'class': 'srd-actions' }, [ primary, local, mapButton, speedButton, exportButton ]),
 					meta
 				]),
 				dial
 			]),
-			steps, live, notice, speedPanel, results
+			steps, live, notice, mapPanel, speedPanel, results
 		]);
 	}
 });

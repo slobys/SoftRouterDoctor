@@ -11,5 +11,13 @@
         "soft-router-doctor": ["repairDns", "applyAcceleration", "optimizeService"]
       }
     }
+  },
+  "luci-app-soft-router-doctor-topology": {
+    "description": "View local network topology and observed device addresses.",
+    "read": {
+      "ubus": {
+        "soft-router-doctor": ["networkMap"]
+      }
+    }
   }
 }
