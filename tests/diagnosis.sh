@@ -30,7 +30,7 @@ case "${0##*/}:$*" in
 		fi ;;
 	'ubus:-S call network.interface.lan status')
 		if [ -f "$SRD_TEST/no-lan-prefix" ]; then
-			echo '{"up":true}'
+			echo '{"up":true,"ipv6-prefix-assignment":[{"address":"fd12:3456:789a::"}]}'
 		else
 			echo '{"up":true,"ipv6-prefix-assignment":[{"address":"2001:db8:1::"}]}'
 		fi ;;
@@ -39,7 +39,8 @@ case "${0##*/}:$*" in
 	'ip:-4 route show default') echo 'default via 192.0.2.1' ;;
 	'ip:-6 route show default')
 		if [ ! -f "$SRD_TEST/no-ipv6" ]; then echo 'default via 2001:db8::1'; fi ;;
-	'ping:-4 '*|'ping:-6 '*) exit 0 ;;
+	'ping:-4 '*) test ! -f "$SRD_TEST/no-icmp4" ;;
+	'ping:-6 '*) exit 0 ;;
 	'curl:-q -4 '*)
 		if [ -f "$SRD_TEST/no-dns" ]; then exit 6; fi
 		printf '200 0.1320' ;;
@@ -122,7 +123,7 @@ expect "$(read_field '@.checks[@.id="internet_v6"].state')" passed
 expect "$(read_field '@.findings[@.id="ipv6_web"].level')" review
 expect "$(read_field '@.findings[@.id="missing_lan_prefix"].level')" review
 rm -f "$scratch/no-web-v6" "$scratch/no-lan-prefix"
-echo 'PASS: groups DNS failure, an IPv6 HTTPS timeout with working Ping, and missing LAN prefix'
+echo 'PASS: groups DNS failure, an IPv6 HTTPS timeout with working Ping, and ULA-only LAN without a global prefix'
 
 touch "$scratch/no-ipv6"
 report=$(sh "$scratch/doctor" scan)
@@ -131,6 +132,13 @@ expect "$(read_field '@.checks[@.id="https_v6"].state')" skipped
 expect "$(read_field '@.findings[@.id="ipv6_web"].level' || true)" ''
 rm -f "$scratch/no-ipv6"
 echo 'PASS: an IPv4-only path does not produce an IPv6 website fault'
+
+touch "$scratch/no-icmp4"
+report=$(sh "$scratch/doctor" scan)
+expect "$(read_field '@.checks[@.id="https_v4"].state')" passed
+expect "$(read_field '@.checks[@.id="internet_v4"].state')" skipped
+rm -f "$scratch/no-icmp4"
+echo 'PASS: ICMP timeout does not claim an outage when HTTPS succeeds'
 
 report=$(sh "$scratch/doctor" scan --local)
 expect "$(read_field '@.mode')" local

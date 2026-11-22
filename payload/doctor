@@ -131,15 +131,16 @@ check_prefix() {
 	check prefix passed '从上游取到了 IPv6 委派前缀。'
 
 	lan=$(ubus -S call network.interface.lan status 2>/dev/null)
+	lan_assignments=$(field "$lan" '@["ipv6-prefix-assignment"][*].address')
 	if [ "$(field "$lan" '@.up')" != true ]; then
 		check lan_prefix skipped '未找到正在运行的标准 LAN 接口。'
-	elif [ -n "$(field "$lan" '@["ipv6-prefix-assignment"][0].address')" ]; then
-		check lan_prefix passed 'LAN 接口已有 IPv6 前缀分配。终端是否收到仍需从终端检查。'
+	elif printf '%s\n' "$lan_assignments" | grep -Eiq '^[23][[:xdigit:]]{3}:'; then
+		check lan_prefix passed 'LAN 接口已有全局 IPv6 前缀分配。终端是否收到仍需从终端检查。'
 	elif [ "$(uci -q get dhcp.lan.ra)" = relay ] ||
 		[ "$(uci -q get dhcp.lan.dhcpv6)" = relay ]; then
 		check lan_prefix skipped 'LAN 使用 IPv6 中继，跳过路由模式的前缀分配判断。'
 	else
-		check lan_prefix warning 'WAN 有委派前缀，标准 LAN 接口未显示前缀分配。'
+		check lan_prefix warning 'WAN 有委派前缀，标准 LAN 接口未显示全局前缀分配。'
 	fi
 }
 
@@ -233,7 +234,10 @@ check_resources() {
 }
 
 finding() {
-	[ -n "$first_finding" ] || first_finding=$3
+	if [ -z "$first_finding" ] || { [ "$first_level" != high ] && [ "$2" = high ]; }; then
+		first_finding=$3
+		first_level=$2
+	fi
 	json_add_object ''
 	json_add_string id "$1"
 	json_add_string level "$2"
@@ -251,6 +255,7 @@ finding() {
 
 assemble_findings() {
 	first_finding=
+	first_level=
 	json_add_array findings
 	if [ "$_srd_wan_link" = warning ] && [ "$have_v4" -eq 0 ] && [ "$have_v6" -eq 0 ]; then
 		finding wan_disconnected high 'WAN 没有链路，且未发现默认出口' \

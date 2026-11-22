@@ -37,7 +37,7 @@ const phases = [
 const styles = [
 	'.srd-root{--ink:#152c3c;--muted:#435e6e;--line:#cbdbe2;--paper:#fff;--wash:#edf5f8;--quiet:#f5f8fa;--subtle:#d6e6ec;--accent:#075873;--accent-hover:#06465d;--accent-ink:#fff;--good:#176149;--warn:#805017;--bad:#a33d24;max-width:1150px;margin:0 auto 30px;font:inherit;color:var(--ink)}',
 	'.srd-root *{box-sizing:border-box}.srd-root ::selection{background:var(--subtle);color:var(--ink)}',
-	'.srd-root h2,.srd-root h3,.srd-root h4,.srd-root p{margin:0}.srd-root p{line-height:1.62}.srd-root [hidden]{display:none!important}',
+	'.srd-root :is(h2,h3,h4){margin:0;padding:0;border:0;box-shadow:none;background:none}.srd-root p{margin:0}.srd-root p{line-height:1.62}.srd-root [hidden]{display:none!important}',
 	'.srd-hero{display:grid;grid-template-columns:minmax(0,1fr) 190px;gap:28px;align-items:center;padding:28px 32px;background:var(--wash);border:1px solid var(--line);border-radius:16px}',
 	'.srd-root .srd-title{font-size:1.85rem;font-weight:750;letter-spacing:-.03em;line-height:1.2;margin-bottom:8px;color:var(--ink)}',
 	'.srd-root .srd-hero-message{max-width:52ch;color:var(--muted);font-size:1rem}',
@@ -61,7 +61,7 @@ const styles = [
 	'@keyframes srd-breathe{from{opacity:.55}to{opacity:1}}',
 	'.srd-notice{background:var(--quiet);border:1px solid var(--line);border-radius:10px;margin-top:14px!important;padding:11px 14px;color:var(--ink)}',
 	'.srd-notice[data-state="error"]{color:var(--bad)}.srd-notice[data-state="success"]{color:var(--good)}',
-	'.srd-results{display:grid;grid-template-columns:minmax(0,1fr) minmax(248px,.43fr);gap:24px;margin-top:24px;align-items:start}',
+	'.srd-results{display:grid;grid-template-columns:minmax(0,1fr) minmax(248px,.43fr);grid-template-rows:max-content 1fr;grid-template-areas:"findings overview" "technical overview";gap:19px 24px;margin-top:24px;align-items:start}.srd-findings{grid-area:findings}.srd-coverage{grid-area:overview}',
 	'.srd-root .srd-section-title{font-size:1.17rem;font-weight:750;color:var(--ink);margin-bottom:10px}',
 	'.srd-marks{display:grid;gap:9px}.srd-issue,.srd-empty{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:15px 17px}',
 	'.srd-issue-heading{display:flex;align-items:baseline;gap:8px 11px;flex-wrap:wrap;margin-bottom:6px}.srd-issue-heading h4{color:var(--ink);line-height:1.38;font-size:1.01rem;font-weight:750}',
@@ -76,12 +76,12 @@ const styles = [
 	'.srd-root .srd-group-link{display:flex;justify-content:space-between;align-items:center;width:100%;min-height:49px;gap:8px;padding:9px 13px;text-align:left;border:0;border-radius:0;background:var(--paper);color:var(--ink);font:inherit;font-weight:650;cursor:pointer}',
 	'.srd-root .srd-group-link:hover{background:var(--quiet)}.srd-root .srd-group-link:focus-visible{outline-offset:-3px}.srd-group-link+.srd-group-link{border-top:1px solid var(--line)}',
 	'.srd-group-count{font-size:.77rem;color:var(--muted);text-align:right;font-variant-numeric:tabular-nums}.srd-root .srd-scope{margin-top:8px;font-size:.8rem;color:var(--muted)}',
-	'.srd-technical{margin-top:22px}.srd-technical details{border-top:1px solid var(--line)}.srd-technical summary{padding-left:3px;color:var(--ink)}',
+	'.srd-technical{grid-area:technical}.srd-technical details{border-top:1px solid var(--line)}.srd-technical summary{padding-left:3px;color:var(--ink)}',
 	'.srd-row{display:grid;grid-template-columns:minmax(108px,.72fr) max-content minmax(0,2.2fr);align-items:start;gap:9px 12px;padding:8px 4px;border-top:1px solid var(--line)}',
 	'.srd-row strong{font-weight:650}.srd-row p{color:var(--muted);font-size:.85rem;overflow-wrap:anywhere}',
 	'.srd-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}',
 	'@media(prefers-color-scheme:dark){.srd-root{--ink:#e4f1f5;--muted:#adc4cf;--line:#38505b;--paper:#1a2830;--wash:#192f3b;--quiet:#233841;--subtle:#365362;--accent:#8bdeeb;--accent-hover:#a4e8f0;--accent-ink:#10252f;--good:#7ad3ac;--warn:#ffc580;--bad:#ffad95}}',
-	'@media(max-width:820px){.srd-results{grid-template-columns:1fr;gap:18px}.srd-hero{padding:24px;grid-template-columns:minmax(0,1fr) 148px;gap:16px}.srd-dial{width:135px;height:135px}}',
+	'@media(max-width:820px){.srd-results{grid-template-columns:1fr;grid-template-rows:auto;grid-template-areas:"findings" "overview" "technical";gap:18px}.srd-hero{padding:24px;grid-template-columns:minmax(0,1fr) 148px;gap:16px}.srd-dial{width:135px;height:135px}}',
 	'@media(max-width:560px){.srd-hero{grid-template-columns:minmax(0,1fr) auto;padding:18px 15px;gap:12px}.srd-hero-copy{display:contents}.srd-hero-intro{grid-column:1;grid-row:1}.srd-dial{width:89px;height:89px;grid-column:2;grid-row:1}.srd-dial::before{inset:6px}.srd-dial-value{font-size:1.26rem}.srd-dial-label{font-size:.66rem;margin-top:4px}.srd-root .srd-title{font-size:1.38rem;margin-bottom:5px}.srd-root .srd-hero-message{font-size:.85rem;line-height:1.48}.srd-actions,.srd-meta{grid-column:1/-1}.srd-actions{margin:0;gap:6px}.srd-root .srd-button,.srd-root .srd-primary{padding:7px 10px;font-size:.82rem}.srd-steps{gap:7px}.srd-step{grid-template-columns:8px minmax(0,1fr);gap:6px;padding:9px}.srd-step-status{grid-column:2}.srd-step-detail{display:none}.srd-results{margin-top:18px}.srd-row{grid-template-columns:minmax(0,1fr) max-content}.srd-row p{grid-column:1/-1}.srd-issue,.srd-empty{padding:13px}}',
 	'@media(prefers-reduced-motion:reduce){.srd-root *{animation:none!important;transition:none!important}}'
 ].join('\n');
@@ -151,7 +151,7 @@ function issueCard(issue, checkById, onRecover) {
 
 function renderReport(report, onRecover) {
 	const checks = report.checks;
-	const findings = report.findings || [];
+	const findings = [...(report.findings || [])].sort((a, b) => Number(b.level === 'high') - Number(a.level === 'high'));
 	const checkById = Object.fromEntries(checks.map(item => [item.id, item]));
 	const buckets = subgroups(checks);
 	const technical = buckets.map(group => E('details', { 'id': 'srd-detail-' + group.id }, [
@@ -183,20 +183,20 @@ function renderReport(report, onRecover) {
 	];
 	return [
 		E('div', { 'class': 'srd-results' }, [
-			E('section', { 'aria-labelledby': 'srd-findings-title' }, [
+			E('section', { 'class': 'srd-findings', 'aria-labelledby': 'srd-findings-title' }, [
 				E('h3', { 'class': 'srd-section-title', 'id': 'srd-findings-title' },
 					findings.length ? '问题与建议 · ' + findings.length : '问题与建议'),
 				E('div', { 'class': 'srd-marks' }, cards)
 			]),
-			E('section', { 'aria-labelledby': 'srd-overview-title' }, [
+			E('section', { 'class': 'srd-coverage', 'aria-labelledby': 'srd-overview-title' }, [
 				E('h3', { 'class': 'srd-section-title', 'id': 'srd-overview-title' }, '本轮检查'),
 				E('div', { 'class': 'srd-overview' }, groupButtons),
 				text('p', '公网结果来自路由器本机。终端和指定应用的连通性需分别核实。', 'srd-scope')
+			]),
+			E('section', { 'class': 'srd-technical', 'aria-labelledby': 'srd-technical-title' }, [
+				E('h3', { 'class': 'srd-section-title', 'id': 'srd-technical-title' }, '检查明细'),
+				...technical
 			])
-		]),
-		E('section', { 'class': 'srd-technical', 'aria-labelledby': 'srd-technical-title' }, [
-			E('h3', { 'class': 'srd-section-title', 'id': 'srd-technical-title' }, '检查明细'),
-			...technical
 		])
 	];
 }
