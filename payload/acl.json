@@ -1,0 +1,15 @@
+{
+  "luci-app-soft-router-doctor": {
+    "description": "Read and diagnose this router. Separately allow guarded DNS recovery.",
+    "read": {
+      "ubus": {
+        "soft-router-doctor": ["status", "scan", "scanLocal"]
+      }
+    },
+    "write": {
+      "ubus": {
+        "soft-router-doctor": ["repairDns"]
+      }
+    }
+  }
+}

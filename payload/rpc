@@ -1,0 +1,19 @@
+#!/bin/sh
+
+case "$1:$2" in
+	list:)
+		printf '%s\n' '{"status":{},"scan":{},"scanLocal":{},"repairDns":{"confirm":true}}' ;;
+	call:status)
+		exec /usr/sbin/soft-router-doctor status ;;
+	call:scan)
+		exec /usr/sbin/soft-router-doctor scan ;;
+	call:scanLocal)
+		exec /usr/sbin/soft-router-doctor scan --local ;;
+	call:repairDns)
+		if [ "$(jsonfilter -e '@.confirm' 2>/dev/null)" = true ]; then
+			exec /usr/sbin/soft-router-doctor fix-dns --confirm
+		fi
+		printf '%s\n' '{"state":"rejected","detail":"请确认启动 dnsmasq。"}' ;;
+	*)
+		exit 1 ;;
+esac

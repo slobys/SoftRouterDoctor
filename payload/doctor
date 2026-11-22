@@ -1,0 +1,284 @@
+#!/bin/sh
+
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+. /usr/share/libubox/jshn.sh
+
+REVISION_FILE=/usr/share/soft-router-doctor/installed
+REPAIR_LOCK=/var/lock/soft-router-doctor-repair
+
+field() {
+	printf '%s\n' "$1" | jsonfilter -e "$2" 2>/dev/null
+}
+
+identity() {
+	json_add_string version '0.1.0-dev'
+	IFS= read -r revision 2>/dev/null < "$REVISION_FILE" || revision=uninstalled
+	json_add_string revision "$revision"
+}
+
+check() {
+	json_add_object ''
+	json_add_string id "$1"
+	json_add_string state "$2"
+	json_add_string detail "$3"
+	json_close_object
+}
+
+check_wan() {
+	interface=$1
+	status=$2
+	address=$3
+	label=$4
+	if [ -z "$status" ]; then
+		check "$interface" skipped "未找到 $label 接口或无法读取状态。旁路由与自定义接口可能使用其他名称。"
+		return
+	fi
+
+	if [ "$(field "$status" '@.up')" != true ]; then
+		check "$interface" warning "$label 接口存在，但未处于运行状态。请确认该接口是否承担上网。"
+	elif [ -z "$(field "$status" "$address")" ]; then
+		check "$interface" warning "$label 接口已运行，但未检测到该协议的地址。"
+	else
+		check "$interface" passed "$label 接口已运行且有地址。"
+	fi
+}
+
+check_wan_link() {
+	device=$(field "$1" '@.device')
+	case "$device" in
+		''|*[!A-Za-z0-9_.:@-]*)
+			check wan_link skipped '无法识别 WAN 设备。'
+			return ;;
+	esac
+	status=$(ubus -S call network.device status "{\"name\":\"$device\"}" 2>/dev/null)
+	case "$(field "$status" '@.carrier')" in
+		true) check wan_link passed 'WAN 设备报告链路已建立。' ;;
+		false) check wan_link warning 'WAN 设备未报告载波。如果此接口负责上网，请检查网线、网口或上级设备。' ;;
+		*) check wan_link skipped '该接口未提供可判断的载波状态。' ;;
+	esac
+}
+
+route_state() {
+	routes=$(ip "-$1" route show default 2>/dev/null) || {
+		check "$2" skipped '系统未返回默认路由信息。'
+		return 1
+	}
+	if [ -z "$routes" ]; then
+		check "$2" warning '主路由表没有该协议的默认路由。策略路由、旁路由或关闭该协议时需要结合配置判断。'
+		return 1
+	fi
+	check "$2" passed '主路由表存在该协议的默认路由。'
+}
+
+probe_ip() {
+	family=$1
+	primary=$2
+	secondary=$3
+	if timeout 3 ping "-$family" -c 1 -W 2 "$primary" >/dev/null 2>&1 ||
+		timeout 3 ping "-$family" -c 1 -W 2 "$secondary" >/dev/null 2>&1; then
+		ip_answer=1
+		check "internet_v$family" passed '路由器收到了至少一个公网地址的 ICMP 回包。'
+	else
+		check "internet_v$family" warning '公网地址未返回 ICMP 回包。也可能是 ICMP 被过滤，需要结合 DNS 和客户端联网情况判断。'
+	fi
+}
+
+resolve_name() {
+	# BusyBox may print the resolver address even when the answer is empty.
+	timeout 3 nslookup "$@" 2>/dev/null | awk '
+		/^Name:[[:space:]]/ { answer = 1 }
+		answer && /^[[:space:]]*Address([[:space:]]+[0-9]+)?:[[:space:]]*[^[:space:]]/ { found = 1 }
+		END { exit !found }
+	'
+}
+
+dns_port_free() {
+	set -- /proc/net/tcp /proc/net/udp
+	[ -r "$1" ] && [ -r "$2" ] || return 1
+	for sockets in /proc/net/tcp6 /proc/net/udp6; do
+		[ ! -e "$sockets" ] || set -- "$@" "$sockets"
+	done
+	awk 'FNR == 1 { seen++ } FNR > 1 && $2 ~ /:0035$/ { used = 1 }
+		END { exit (used || seen != ARGC - 1) }' "$@" 2>/dev/null
+}
+
+dns_can_start() {
+	[ -x /etc/init.d/dnsmasq ] || return 1
+	/etc/init.d/dnsmasq enabled >/dev/null 2>&1 || return 1
+
+	sections=$(uci -q show dhcp | sed -n 's/^dhcp\.\([^=]*\)=dnsmasq$/\1/p')
+	[ -n "$sections" ] || return 1
+	case "$sections" in
+		'@dnsmasq[0]') ;;
+		*[!A-Za-z0-9_]*) return 1 ;;
+	esac
+	[ "$(uci -q get "dhcp.$sections.disabled")" != 1 ] || return 1
+	case "$(uci -q get "dhcp.$sections.port")" in
+		''|53) ;;
+		*) return 1 ;;
+	esac
+	[ -z "$(uci -q get "dhcp.$sections.interface")" ] || return 1
+	[ -z "$(uci -q get "dhcp.$sections.listen_address")" ] || return 1
+	[ -z "$(uci -q get "dhcp.$sections.listen-address")" ] || return 1
+	[ -z "$(uci -q get "dhcp.$sections.notinterface")" ] || return 1
+	[ -z "$(uci -q get "dhcp.$sections.confdir")" ] || return 1
+	service=$(ubus -S call service list '{"name":"dnsmasq"}' 2>/dev/null) || return 1
+	field "$service" '@.dnsmasq.instances.*.running' | grep -qx true && return 1
+	pidof dnsmasq >/dev/null 2>&1 && return 1
+	dns_port_free
+}
+
+check_dns_service() {
+	if dns_can_start; then
+		check dnsmasq failed 'dnsmasq 已启用，但未见运行实例，且未检测到 53 端口冲突。可以尝试启动服务。'
+		dns_repair=1
+	elif pidof dnsmasq >/dev/null 2>&1; then
+		check dnsmasq passed '检测到 dnsmasq 进程。请结合 DNS 查询项判断解析是否正常。'
+	else
+		check dnsmasq skipped '未检测到 dnsmasq 进程，且不满足安全启动条件。可能使用其他 DNS 服务或自定义配置。'
+	fi
+}
+
+check_resources() {
+	usage=$(df -Pk /overlay 2>/dev/null | awk 'NR == 2 { print $5 }')
+	[ -n "$usage" ] || usage=$(df -Pk / 2>/dev/null | awk 'NR == 2 { print $5 }')
+	percent=$(printf '%s\n' "$usage" | awk '/^[0-9]+%$/ { sub(/%$/, ""); print }')
+	if [ -z "$percent" ]; then
+		check storage skipped '无法读取系统分区占用。'
+	elif [ "$percent" -ge 90 ]; then
+		check storage warning "系统可写分区或根分区使用率为 $percent%，接近写满。"
+	else
+		check storage passed "系统可写分区或根分区使用率为 $percent%。"
+	fi
+
+	available=$(awk '/^MemTotal:/ { total = $2 } /^MemAvailable:/ { free = $2 } \
+		END { if (total && free ~ /^[0-9]+$/) print int(free / total * 100) }' /proc/meminfo)
+	if [ -z "$available" ]; then
+		check memory skipped '内核未提供可用内存估算。'
+	elif [ "$available" -le 10 ]; then
+		check memory warning "预计可用内存为 $available%，请检查高占用进程。"
+	else
+		check memory passed "预计可用内存为 $available%。"
+	fi
+}
+
+scan() {
+	mode=$1
+	board=$(ubus -S call system board 2>/dev/null)
+	wan=$(ubus -S call network.interface.wan status 2>/dev/null)
+	wan6=$(ubus -S call network.interface.wan6 status 2>/dev/null)
+	auto6=$(ubus -S call network.interface.wan_6 status 2>/dev/null)
+	wan6_label=WAN6
+	if [ "$(field "$wan6" '@.up')" != true ] && [ "$(field "$auto6" '@.up')" = true ]; then
+		wan6=$auto6
+		wan6_label='自动派生的 WAN6'
+	fi
+	dns_repair=0
+	dns_answer=0
+	ip_answer=0
+
+	json_init
+	identity
+	json_add_string timestamp "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+	json_add_string firmware "$(field "$board" '@.release.description')"
+	json_add_string model "$(field "$board" '@.model')"
+	json_add_string mode "$mode"
+	json_add_array checks
+	check_wan_link "$wan"
+	check_wan wan "$wan" '@["ipv4-address"][0].address' 'WAN'
+	check_wan wan6 "$wan6" '@["ipv6-address"][0].address' "$wan6_label"
+	if [ -z "$wan6" ] && [ -z "$wan" ]; then
+		check prefix skipped '未找到常用 WAN 接口。'
+	elif [ -n "$(field "$wan6" '@["ipv6-prefix"][0].address')" ] ||
+		[ -n "$(field "$wan" '@["ipv6-prefix"][0].address')" ]; then
+		check prefix passed '检测到 WAN 接口取得 IPv6 前缀。客户端是否收到前缀需在客户端复查。'
+	else
+		check prefix skipped '未在常用 WAN 接口发现 IPv6 前缀。仅在需要下发 IPv6 前缀时进一步排查。'
+	fi
+	have_v4=0
+	have_v6=0
+	route_state 4 route_v4 && have_v4=1
+	route_state 6 route_v6 && have_v6=1
+	check_dns_service
+	if [ "$mode" = online ]; then
+		if resolve_name openwrt.org || resolve_name example.com; then
+			dns_answer=1
+			check dns passed '路由器使用系统默认解析器取得了至少一个测试域名的地址。'
+		else
+			check dns warning '测试域名未返回地址。请结合 DNS 服务和上游连通结果判断。'
+		fi
+		if [ "$have_v4" -eq 1 ]; then
+			probe_ip 4 1.1.1.1 223.5.5.5
+		else
+			check internet_v4 skipped '主路由表无 IPv4 默认路由，跳过公网探测。'
+		fi
+		if [ "$have_v6" -eq 1 ]; then
+			probe_ip 6 2606:4700:4700::1111 2001:4860:4860::8888
+		else
+			check internet_v6 skipped '主路由表无 IPv6 默认路由，跳过公网探测。'
+		fi
+	else
+		check dns skipped '仅检查本机，未查询测试域名。'
+		check internet_v4 skipped '仅检查本机，未发送公网探测。'
+		check internet_v6 skipped '仅检查本机，未发送公网探测。'
+	fi
+	check_resources
+	json_close_array
+	json_add_boolean can_start_dnsmasq "$dns_repair"
+	if [ "$dns_repair" -eq 1 ]; then
+		json_add_string summary '检测到已启用但未运行的 dnsmasq。请优先查看 DNS 服务及现有 DHCP 配置。'
+	elif [ "$mode" = local ]; then
+		json_add_string summary '已检查路由器本机状态。公网连接和域名解析未验证。'
+	elif [ "$dns_answer" -eq 0 ] && [ "$ip_answer" -eq 1 ]; then
+		json_add_string summary '公网 IP 有回包，但域名查询失败。优先排查路由器的 DNS 转发和上游解析。'
+	elif [ "$dns_answer" -eq 0 ]; then
+		json_add_string summary '域名查询和公网探测都未确认可用。先核对 WAN 链路和默认路由。'
+	elif [ "$ip_answer" -eq 0 ]; then
+		json_add_string summary '域名可以解析。公网 ICMP 未验证成功，必要时在终端上实际访问网页复查。'
+	else
+		json_add_string summary '路由器可以解析测试域名，至少一个公网地址有回包。客户端联网情况需单独验证。'
+	fi
+	json_dump
+}
+
+repair_result() {
+	json_init
+	json_add_string state "$1"
+	json_add_string detail "$2"
+	json_dump
+}
+
+repair_dns() {
+	if ! mkdir "$REPAIR_LOCK" 2>/dev/null; then
+		repair_result rejected '已有修复正在运行，或无法取得修复锁。'
+		return
+	fi
+	trap 'rmdir "$REPAIR_LOCK" 2>/dev/null' EXIT
+	trap 'exit 1' HUP INT TERM
+
+	if ! dns_can_start; then
+		repair_result rejected '当前条件不允许启动 dnsmasq。请重新检测后查看服务状态。'
+		return
+	fi
+	if ! timeout 8 /etc/init.d/dnsmasq start >/dev/null 2>&1; then
+		repair_result failed '启动命令失败或超时。可在系统日志查看原因。'
+		return
+	fi
+	for attempt in 1 2; do
+		if pidof dnsmasq >/dev/null 2>&1 && resolve_name openwrt.org 127.0.0.1; then
+			repair_result repaired 'dnsmasq 已启动，且通过本机 127.0.0.1 的 DNS 查询复测。'
+			return
+		fi
+		[ "$attempt" -eq 2 ] || sleep 1
+	done
+	repair_result unverified '已尝试启动，DNS 查询仍未通过。请检查 dnsmasq 日志或上游 DNS，并复测局域网客户端。'
+}
+
+case "$*" in
+	scan) scan online ;;
+	'scan --local') scan local ;;
+	status) json_init; identity; json_dump ;;
+	'fix-dns --confirm') repair_dns ;;
+	*) echo 'Usage: soft-router-doctor {scan [--local]|status|fix-dns --confirm}' >&2; exit 2 ;;
+esac

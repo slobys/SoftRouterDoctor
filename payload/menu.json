@@ -1,0 +1,13 @@
+{
+  "admin/status/soft-router-doctor": {
+    "title": "软路由检测",
+    "order": 85,
+    "action": {
+      "type": "view",
+      "path": "status/soft-router-doctor"
+    },
+    "depends": {
+      "acl": ["luci-app-soft-router-doctor"]
+    }
+  }
+}
