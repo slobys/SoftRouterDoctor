@@ -9,13 +9,16 @@ REPAIR_LOCK=/var/lock/soft-router-doctor-repair
 APK_CACHE=/var/cache/apk
 APK_CUSTOM_CACHE=/etc/apk/cache
 APK_DB_LOCK=/lib/apk/db/lock
+INIT_DIR=/etc/init.d
+RC_DIR=/etc/rc.d
+OPTIMIZE_LOCK=/var/lock/soft-router-doctor-optimization
 
 field() {
 	printf '%s\n' "$1" | jsonfilter -e "$2" 2>/dev/null
 }
 
 identity() {
-	json_add_string version '0.3.0-dev'
+	json_add_string version '0.4.0-dev'
 	IFS= read -r revision 2>/dev/null < "$REVISION_FILE" || revision=uninstalled
 	json_add_string revision "$revision"
 }
@@ -437,20 +440,23 @@ cpu_counters() {
 }
 
 sample_performance() {
-	local first second writable
+	local scratch="$1" first second writable
 	first=$(cpu_counters)
+	[ -z "$scratch" ] || process_snapshot 0 > "$scratch/before"
 	sleep 1
 	second=$(cpu_counters)
+	[ -z "$scratch" ] || process_snapshot 1 > "$scratch/after"
 	cpu_usage=$(awk -v first="$first" -v second="$second" 'BEGIN {
 		split(first, a, " "); split(second, b, " ")
 		count = b[1] - a[1]
 		busy = count - (b[2] - a[2]) - (b[3] - a[3])
 		wait = b[3] - a[3]
 		if (a[1] && count > 0 && busy >= 0 && busy <= count && wait >= 0 && wait <= count)
-			printf "%.0f %.0f", 100 * busy / count, 100 * wait / count
+			printf "%.0f %.0f %.0f", 100 * busy / count, 100 * wait / count, count
 	}')
-	cpu_busy=${cpu_usage%% *}
-	cpu_wait=${cpu_usage##* }
+	IFS=' ' read -r cpu_busy cpu_wait cpu_delta <<EOF
+$cpu_usage
+EOF
 	mem_available=$(memory_percent)
 	writable=$(writable_path)
 	storage_free=$(df -Pk "$writable" 2>/dev/null | awk 'NR == 2 && $4 ~ /^[0-9]+$/ { print $4 }')
@@ -534,8 +540,11 @@ inspect_cache() {
 	plan_detail='软件包管理器确认这些缓存已过期。清理后需要时可重新下载。'
 }
 
-acceleration_plan() {
-	sample_performance
+acceleration_plan() (
+	scratch=$(mktemp -d /tmp/soft-router-doctor-processes.XXXXXX 2>/dev/null)
+	trap '[ -z "$scratch" ] || rm -rf "$scratch"' EXIT
+	trap 'exit 1' HUP INT TERM
+	sample_performance "$scratch"
 	inspect_cache
 	json_init
 	json_add_string state "$plan_state"
@@ -548,8 +557,10 @@ acceleration_plan() {
 	json_add_int candidate_count "$plan_count"
 	json_add_boolean temporary "$cache_temporary"
 	json_add_string token "$plan_token"
+	process_rankings "$scratch" "$cpu_delta"
+	add_service_inventory
 	json_dump
-}
+)
 
 apply_acceleration() (
 	requested=$1
@@ -605,6 +616,266 @@ EOF
 	json_add_boolean temporary "$cache_temporary"
 	json_dump
 ) 9< "$APK_DB_LOCK" 2>/dev/null
+
+process_snapshot() {
+	LC_ALL=C awk -v memory="$1" 'BEGIN {
+		for (i = 1; i < ARGC; i++) {
+			file = ARGV[i]
+			if ((getline row < file) != 1) { close(file); continue }
+			close(file)
+			pid = row + 0
+			if (!pid) continue
+			name = row
+			sub(/^[0-9]+ \(/, "", name)
+			sub(/\) [^)]*$/, "", name)
+			gsub(/[^-A-Za-z0-9 _+@.():]/, "?", name)
+			sub(/^.*\) /, "", row)
+			split(row, f, " ")
+			if (f[20] !~ /^[0-9]+$/) continue
+			rss = -1
+			if (memory) {
+				sub(/\/stat$/, "/status", file)
+				while ((getline line < file) > 0) {
+					if (line ~ /^VmRSS:/) { split(line, m, " "); rss = m[2]+0; break }
+				}
+				close(file)
+			}
+			printf "%d|%s|%.0f|%s|%d\n", pid, f[20], f[12]+f[13], name, rss
+		}
+	}' /proc/[0-9]*/stat 2>/dev/null
+}
+
+process_rankings() {
+	local scratch="$1" total_delta="$2" key metric pid cpu rss name
+	if [ -n "$scratch" ]; then
+		LC_ALL=C awk -F '|' -v total="$total_delta" '
+			FILENAME == ARGV[1] { ticks[$1 "|" $2] = $3; next }
+			{ id = $1 "|" $2
+			  cpu = -1
+			  if ((id in ticks) && total > 0 && $3 >= ticks[id] && $3 - ticks[id] <= total)
+				cpu = 100 * ($3 - ticks[id]) / total
+			  printf "%s|%.1f|%s|%s\n", $1, cpu, $5, $4 }
+		' "$scratch/before" "$scratch/after" > "$scratch/processes"
+	fi
+	for metric in cpu memory; do
+		case "$metric" in cpu) key=2 ;; memory) key=3 ;; esac
+		json_add_array "top_$metric"
+		if [ -n "$scratch" ]; then
+			LC_ALL=C sort -t '|' -k "$key,${key}nr" "$scratch/processes" |
+				awk -F '|' -v key="$key" '$key > 0 { print; if (++count == 8) exit }' > "$scratch/top"
+			while IFS='|' read -r pid cpu rss name; do
+				json_add_object ''
+				json_add_int pid "$pid"
+				json_add_string name "$name"
+				json_add_string cpu_percent "$cpu"
+				json_add_int rss_kib "$rss"
+				json_close_object
+			done < "$scratch/top"
+		fi
+		json_close_array
+	done
+}
+
+optional_service() {
+	package_alt=
+	case "$1" in
+		samba4) package=samba4-server; label='Samba 文件共享'; impact='停止会断开 SMB 文件共享连接。' ;;
+		avahi-daemon) package=avahi-daemon; package_alt=avahi-dbus-daemon; label='Avahi 局域网发现'; impact='停止后可能无法通过 .local 或自动发现访问局域网设备。' ;;
+		wsdd2) package=wsdd2; label='Windows 网络发现'; impact='停止后设备可能不再出现在 Windows 的网络列表中。' ;;
+		minidlna) package=minidlna; label='DLNA 媒体共享'; impact='停止会中断媒体库发现和播放。' ;;
+		collectd) package=collectd; label='Collectd 监控采集'; impact='停止后会暂停该服务采集的性能统计和上报。' ;;
+		vnstat) package=vnstat2; label='vnStat 流量统计'; impact='停止后该服务将暂时停止记录流量。' ;;
+		aria2) package=aria2; label='Aria2 下载服务'; impact='停止会中断下载和做种。' ;;
+		transmission) package=transmission-daemon; label='Transmission 下载服务'; impact='停止会中断下载和做种。' ;;
+		*) return 1 ;;
+	esac
+	[ -n "$package_alt" ] || package_alt=$package
+}
+
+inspect_service() {
+	local owner data enabled_status
+	service_id=$1
+	optional_service "$service_id" || return 1
+	service_init="$INIT_DIR/$service_id"
+	[ -f "$service_init" ] && [ -x "$service_init" ] && [ ! -L "$service_init" ] || return 1
+	if command -v apk >/dev/null 2>&1; then
+		owner=$(LC_ALL=C timeout 3 apk info --who-owns "$service_init" 2>/dev/null | awk '/ is owned by / { print $NF }')
+		case "$owner" in "$package"-[0-9]*|"$package_alt"-[0-9]*) ;; *) return 1 ;; esac
+	elif command -v opkg >/dev/null 2>&1; then
+		owner=$(LC_ALL=C timeout 3 opkg search "$service_init" 2>/dev/null | awk 'NR == 1 { print $1 }')
+		[ "$owner" = "$package" ] || [ "$owner" = "$package_alt" ] || return 1
+	else
+		return 1
+	fi
+	data=$(ubus -S call service list "{\"name\":\"$service_id\"}" 2>/dev/null) || return 1
+	service_enabled=0
+	service_running=0
+	timeout 2 "$service_init" enabled >/dev/null 2>&1
+	enabled_status=$?
+	case "$enabled_status" in 0) service_enabled=1 ;; 1) ;; *) return 1 ;; esac
+	field "$data" "@[\"$service_id\"].instances.*.running" | grep -qx true && service_running=1
+	service_pids=$(field "$data" "@[\"$service_id\"].instances.*.pid" | LC_ALL=C sort -n)
+	service_hash=$(sha256sum "$service_init" 2>/dev/null) || return 1
+	service_token=$(printf '%s\n' "$service_id" "$service_enabled" "$service_running" "$service_pids" "$service_hash" | sha256sum)
+	service_token=${service_token%% *}
+}
+
+add_service_inventory() {
+	local candidate link name pid
+	json_add_array services
+	for candidate in samba4 avahi-daemon wsdd2 minidlna collectd vnstat aria2 transmission; do
+		inspect_service "$candidate" || continue
+		if [ "$service_enabled" -eq 0 ] && [ "$service_running" -eq 0 ]; then continue; fi
+		json_add_object ''
+		json_add_string id "$candidate"
+		json_add_string label "$label"
+		json_add_string impact "$impact"
+		json_add_boolean running "$service_running"
+		json_add_boolean enabled "$service_enabled"
+		json_add_string token "$service_token"
+		json_add_array pids
+		for pid in $service_pids; do
+			case "$pid" in ''|*[!0-9]*) continue ;; esac
+			json_add_int '' "$pid"
+		done
+		json_close_array
+		json_close_object
+	done
+	json_close_array
+
+	json_add_array startups
+	for link in "$RC_DIR"/S[0-9][0-9]*; do
+		[ -L "$link" ] || continue
+		name=${link##*/}
+		name=${name#???}
+		case "$name" in ''|*[!A-Za-z0-9_.-]*) continue ;; esac
+		json_add_string '' "$name"
+	done
+	json_close_array
+}
+
+route_signature() {
+	local routes
+	routes=$(ip "-$1" route show default 2>/dev/null) || return 1
+	printf '%s\n' "$routes" | sed -E 's/ expires [^ ]+//g' | LC_ALL=C sort
+}
+
+service_https() {
+	local response
+	response=$(curl -q "-$1" --noproxy '*' --proto '=https' --head --connect-timeout 2 \
+		--max-time 2 --output /dev/null --write-out '%{http_code}' https://example.com/ 2>/dev/null) || return 1
+	case "$response" in [1-5][0-9][0-9]) return 0 ;; *) return 1 ;; esac
+}
+
+capture_network() {
+	command -v curl >/dev/null 2>&1 || return 1
+	route_before_v4=$(route_signature 4) || return 1
+	route_before_v6=$(route_signature 6) || return 1
+	resolve_name example.com || return 1
+	had_web_v4=0
+	had_web_v6=0
+	[ -n "$route_before_v4" ] && service_https 4 && had_web_v4=1
+	[ -n "$route_before_v6" ] && service_https 6 && had_web_v6=1
+	[ "$had_web_v4" -eq 1 ] || [ "$had_web_v6" -eq 1 ]
+}
+
+network_still_works() {
+	local v4 v6
+	v4=$(route_signature 4) && v6=$(route_signature 6) || return 1
+	[ "$v4" = "$route_before_v4" ] && [ "$v6" = "$route_before_v6" ] || return 1
+	resolve_name example.com || return 1
+	[ "$had_web_v4" -eq 0 ] || service_https 4 || return 1
+	[ "$had_web_v6" -eq 0 ] || service_https 6 || return 1
+}
+
+restore_service() {
+	local restored=1 command
+	inspect_service "$requested_service" && [ "$service_hash" = "$was_hash" ] || return 1
+	if [ "$service_enabled" -ne "$was_enabled" ]; then
+		if [ "$was_enabled" -eq 1 ]; then command=enable; else command=disable; fi
+		timeout 2 "$service_init" "$command" >/dev/null 2>&1 || restored=0
+	fi
+	if [ "$service_running" -ne "$was_running" ]; then
+		if [ "$was_running" -eq 1 ]; then command=start; else command=stop; fi
+		timeout 3 "$service_init" "$command" >/dev/null 2>&1 || restored=0
+	fi
+	inspect_service "$requested_service" && [ "$service_hash" = "$was_hash" ] &&
+		[ "$restored" -eq 1 ] && [ "$service_running" -eq "$was_running" ] && [ "$service_enabled" -eq "$was_enabled" ]
+}
+
+apply_service_optimization() (
+	requested_service=$1
+	requested_token=$2
+	stop=$3
+	disable=$4
+	case "$stop:$disable" in true:false|false:true|true:true) ;; *)
+		repair_result rejected '请选择要执行的优化动作。'; exit ;;
+	esac
+	if ! mkdir "$OPTIMIZE_LOCK" 2>/dev/null; then
+		repair_result busy '另一项服务优化正在执行。'
+		exit
+	fi
+	attempted_stop=0
+	attempted_disable=0
+	committed=0
+	trap '
+		if [ "$committed" -eq 0 ] && { [ "$attempted_stop" -eq 1 ] || [ "$attempted_disable" -eq 1 ]; }; then
+			restore_service
+		fi
+		rmdir "$OPTIMIZE_LOCK" 2>/dev/null
+	' EXIT
+	trap 'exit 1' HUP INT TERM
+	if ! inspect_service "$requested_service" || [ "$requested_token" != "$service_token" ] ||
+		{ [ "$stop" = true ] && [ "$service_running" -ne 1 ]; } ||
+		{ [ "$disable" = true ] && [ "$service_enabled" -ne 1 ]; }; then
+		repair_result rejected '此服务受保护、状态已变化或当前动作不可用。请重新检查。'
+		exit
+	fi
+	if ! capture_network; then
+		repair_result rejected '路由器当前未通过 DNS 和 HTTPS 基线检查，已暂停服务优化。'
+		exit
+	fi
+	if ! inspect_service "$requested_service" || [ "$requested_token" != "$service_token" ]; then
+		repair_result rejected '服务状态已变化，请重新检查后再确认。'
+		exit
+	fi
+	was_enabled=$service_enabled
+	was_running=$service_running
+	was_hash=$service_hash
+	expected_enabled=$was_enabled
+	expected_running=$was_running
+	ok=1
+	if [ "$stop" = true ]; then
+		attempted_stop=1
+		expected_running=0
+		timeout 3 "$service_init" stop >/dev/null 2>&1 || ok=0
+	fi
+	if [ "$ok" -eq 1 ] && [ "$disable" = true ]; then
+		attempted_disable=1
+		expected_enabled=0
+		timeout 2 "$service_init" disable >/dev/null 2>&1 || ok=0
+	fi
+	if [ "$ok" -eq 1 ] && inspect_service "$requested_service" && [ "$service_hash" = "$was_hash" ] &&
+		[ "$service_running" -eq "$expected_running" ] && [ "$service_enabled" -eq "$expected_enabled" ] &&
+		network_still_works; then
+		committed=1
+		repair_result applied '服务状态已更新，路由器联网复测通过。'
+	elif restore_service; then
+		committed=1
+		if network_still_works; then
+			repair_result reverted '优化未通过复测，已恢复服务原状，路由器联网验证通过。'
+		else
+			repair_result reverted '已恢复服务原状，路由器联网检查仍未通过。'
+		fi
+	else
+		repair_result attention '暂未确认服务已恢复，请到系统启动项核对状态。'
+	fi
+)
+
+if [ "$1" = optimize-service ] && [ "$#" -eq 5 ]; then
+	apply_service_optimization "$2" "$3" "$4" "$5"
+	exit
+fi
 
 if [ "$1" = accelerate ]; then
 	case "$#" in

@@ -8,7 +8,7 @@
     },
     "write": {
       "ubus": {
-        "soft-router-doctor": ["repairDns", "applyAcceleration"]
+        "soft-router-doctor": ["repairDns", "applyAcceleration", "optimizeService"]
       }
     }
   }

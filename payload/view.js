@@ -15,6 +15,10 @@ const accelerationPlan = rpc.declare({
 const applyAcceleration = rpc.declare({
 	object: 'soft-router-doctor', method: 'applyAcceleration', params: [ 'confirm', 'token' ], reject: true
 });
+const optimizeService = rpc.declare({
+	object: 'soft-router-doctor', method: 'optimizeService',
+	params: [ 'confirm', 'service', 'token', 'stop', 'disable' ], reject: true
+});
 
 const groups = [
 	{ id: 'uplink', title: '接入与路由', ids: ['wan_link', 'wan', 'route_v4', 'route_v6'] },
@@ -86,7 +90,11 @@ const styles = [
 	'.srd-accel-stat dt{color:var(--muted);font-size:.8rem}.srd-accel-stat dd{margin:2px 0 0;font-weight:750;font-size:1.06rem;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}',
 	'.srd-root .srd-accel-copy{color:var(--muted);font-size:.9rem}.srd-root .srd-accel-action{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-top:10px}',
 	'.srd-root .srd-accel-result{margin-bottom:10px;padding:9px 12px;background:var(--quiet);border-radius:8px;color:var(--ink)}.srd-root .srd-accel-result[data-state="applied"]{color:var(--good)}',
-	'@media(max-width:560px){.srd-accel{padding:12px}.srd-accel-stat{padding:8px}.srd-accel-stat dt{font-size:.73rem}.srd-accel-stat dd{font-size:.92rem}}',
+	'.srd-ranks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 18px;margin:14px 0 18px}.srd-root .srd-rank-title{font-size:.98rem;font-weight:750;margin-bottom:4px}',
+	'.srd-rank-list,.srd-service-results,.srd-service-list{padding:0;margin:0;list-style:none}.srd-rank-list li{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:baseline;gap:8px;padding:5px 0;border-top:1px solid var(--line);line-height:1.5}.srd-rank-list li span:first-child{overflow-wrap:anywhere}.srd-rank-list small{color:var(--muted);margin-inline-start:6px}.srd-rank-value{color:var(--accent);font-weight:700;font-variant-numeric:tabular-nums}',
+	'.srd-service-list li{padding:10px 0;border-top:1px solid var(--line)}.srd-service-heading{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 10px}.srd-service-actions{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:3px}.srd-service-toggle{display:inline-flex;align-items:center;gap:6px;min-height:44px;cursor:pointer}.srd-service-toggle input{margin:0;accent-color:var(--accent)}.srd-service-toggle input:focus-visible{outline:2px solid var(--accent);outline-offset:3px}',
+	'.srd-root .srd-service-controls{margin:10px 0 14px}.srd-startups{color:var(--muted);font-size:.8rem;overflow-wrap:anywhere}.srd-service-results li{margin-bottom:5px}',
+	'@media(max-width:560px){.srd-accel{padding:12px}.srd-accel-stat{padding:8px}.srd-accel-stat dt{font-size:.73rem}.srd-accel-stat dd{font-size:.92rem}.srd-ranks{grid-template-columns:1fr}.srd-service-toggle{font-size:.85rem}}',
 	'.srd-root .srd-group-link{display:flex;justify-content:space-between;align-items:center;width:100%;min-height:49px;gap:8px;padding:9px 13px;text-align:left;border:0;border-radius:0;background:var(--paper);color:var(--ink);font:inherit;font-weight:650;cursor:pointer}',
 	'.srd-root .srd-group-link:hover{background:var(--quiet)}.srd-root .srd-group-link:focus-visible{outline-offset:-3px}.srd-group-link+.srd-group-link{border-top:1px solid var(--line)}',
 	'.srd-group-count{font-size:.77rem;color:var(--muted);text-align:right;font-variant-numeric:tabular-nums}.srd-root .srd-scope{margin-top:8px;font-size:.8rem;color:var(--muted)}',
@@ -226,13 +234,72 @@ function formatPercent(value) {
 	return Number.isFinite(value) && value >= 0 ? value + '%' : '未测';
 }
 
-function renderAcceleration(plan, result, confirm) {
+function renderRanking(title, entries, metric, namesByPid) {
+	return E('section', {}, [
+		text('h4', title, 'srd-rank-title'),
+		entries.length ? E('ul', { 'class': 'srd-rank-list' }, entries.map(item => E('li', {}, [
+			E('span', {}, [ item.name + ' ', text('small', 'PID ' + item.pid +
+				(namesByPid.has(item.pid) ? ' · ' + namesByPid.get(item.pid) : '')) ]),
+			text('span', metric === 'cpu' ? formatPercent(Number(item.cpu_percent)) : formatKiB(item.rss_kib), 'srd-rank-value')
+		]))) : text('p', '本轮未取得可排名的样本。', 'srd-accel-copy')
+	]);
+}
+
+function renderServiceOptions(plan, onOptimize) {
+	const services = plan.services || [];
+	const known = new Set(services.map(service => service.id));
+	const protectedNames = [...new Set(plan.startups || [])].filter(name => !known.has(name)).sort();
+	const selections = [];
+	const action = button('优化选中项', () => onOptimize(selections.map(({ service, stop, disable }) => ({
+		...service, stop: !!stop?.checked, disable: !!disable?.checked
+	})).filter(service => service.stop || service.disable)), true);
+	action.disabled = true;
+
+	function checkbox(label, service) {
+		const input = E('input', {
+			'type': 'checkbox', 'aria-label': service.label + '：' + label,
+			'change': () => { action.disabled = !selections.some(item => item.stop?.checked || item.disable?.checked); }
+		});
+		return { input, label: E('label', { 'class': 'srd-service-toggle' }, [ input, label ]) };
+	}
+
+	const rows = services.map(service => {
+		const stop = onOptimize && service.running ? checkbox('停止当前服务', service) : null;
+		const disable = onOptimize && service.enabled ? checkbox('关闭开机自启', service) : null;
+		selections.push({ service, stop: stop?.input, disable: disable?.input });
+		return E('li', {}, [
+			E('div', { 'class': 'srd-service-heading' }, [
+				text('strong', service.label),
+				chip('skipped', [service.running ? '正在运行' : '未运行', service.enabled ? '已自启' : '自启关闭'].join(' · '))
+			]),
+			text('p', service.impact, 'srd-accel-copy'),
+			stop || disable ? E('div', { 'class': 'srd-service-actions' }, [stop?.label, disable?.label].filter(Boolean)) : ''
+		]);
+	});
+	return E('section', { 'class': 'srd-service-controls' }, [
+		text('h4', '可选后台服务', 'srd-rank-title'),
+		rows.length ? E('ul', { 'class': 'srd-service-list' }, rows) :
+			text('p', '未发现已运行或已自启的可选服务。', 'srd-accel-copy'),
+		rows.length && onOptimize ? E('div', { 'class': 'srd-accel-action' }, [ action,
+			text('span', '逐项应用并从路由器复测 DNS 和网页访问。', 'srd-accel-copy') ]) : '',
+		protectedNames.length ? E('details', { 'class': 'srd-evidence' }, [
+			text('summary', '其余自启动项（' + protectedNames.length + '，仅查看）'),
+			text('p', protectedNames.join('、'), 'srd-startups')
+		]) : ''
+	]);
+}
+
+function renderAcceleration(plan, result, confirm, onOptimize, serviceResults) {
 	const stats = [
 		['CPU 忙碌率', formatPercent(plan.cpu_busy)],
 		['可用内存', formatPercent(plan.memory_available)],
 		['可写分区剩余', formatKiB(plan.storage_free_kib)]
 	];
 	const nodes = [];
+	if (serviceResults.length) {
+		nodes.push(E('ul', { 'class': 'srd-service-results', 'role': 'status' }, serviceResults.map(entry =>
+			E('li', { 'class': 'srd-accel-result', 'data-state': entry.state }, entry.label + '：' + entry.detail))));
+	}
 	if (result) {
 		const numbers = result.removed > 0 ? '已处理 ' + result.removed + ' 项' +
 			(result.reclaimed_kib >= 0 ? '，' + (result.temporary ? '临时' : '') +
@@ -249,6 +316,13 @@ function renderAcceleration(plan, result, confirm) {
 	} else if (plan.cpu_busy >= 85) {
 		nodes.push(text('p', '本次采样 CPU 较忙。若卡顿持续，可在「状态 → 进程」查看高占用服务。', 'srd-accel-copy'));
 	}
+	const namesByPid = new Map((plan.services || []).flatMap(service =>
+		(service.pids || []).map(pid => [pid, service.label])));
+	nodes.push(E('div', { 'class': 'srd-ranks' }, [
+		renderRanking('CPU 排行 · 全机比例', plan.top_cpu || [], 'cpu', namesByPid),
+		renderRanking('内存排行 · 常驻内存', plan.top_memory || [], 'memory', namesByPid)
+	]));
+	nodes.push(renderServiceOptions(plan, onOptimize), text('h4', 'APK 缓存', 'srd-rank-title'));
 	if (plan.state === 'ready') {
 		const capacity = plan.cache_kib >= 0 ? '，缓存目录当前占用 ' + formatKiB(plan.cache_kib) : '';
 		nodes.push(text('p', '发现 ' + plan.candidate_count + ' 项可回收的过期 APK 缓存' + capacity + '。', 'srd-accel-copy'));
@@ -304,12 +378,12 @@ return view.extend({
 		speedButton.setAttribute('aria-controls', 'srd-accel');
 		speedButton.setAttribute('aria-expanded', 'false');
 
-		const speedContent = E('div', { 'aria-live': 'polite' });
+		const speedContent = E('div');
 		const speedPanel = E('section', {
 			'class': 'srd-accel', 'id': 'srd-accel', 'aria-labelledby': 'srd-accel-title', 'hidden': true
 		}, [
 			E('div', { 'class': 'srd-accel-top' }, [
-				E('h3', { 'class': 'srd-section-title', 'id': 'srd-accel-title' }, '资源检查与回收'),
+				E('h3', { 'class': 'srd-section-title', 'id': 'srd-accel-title' }, '进程、自启动与缓存'),
 				button('收起', () => {
 					speedPanel.hidden = true;
 					speedButton.setAttribute('aria-expanded', 'false');
@@ -319,25 +393,60 @@ return view.extend({
 			speedContent
 		]);
 
-		async function runAcceleration(plan) {
+		function confirmOptimization(items) {
+			ui.showModal('确认优化选中项', [
+				text('p', '请确认下列服务的功能目前用不到。每项都会先检查联网，再应用并复测。'),
+				E('ul', {}, items.map(item => text('li', item.label + '：' +
+					[item.stop ? '停止当前服务' : '', item.disable ? '关闭开机自启' : ''].filter(Boolean).join('、') +
+					'。' + item.impact))),
+				E('div', { 'class': 'right' }, [
+					E('button', { 'type': 'button', 'class': 'cbi-button', 'click': () => ui.hideModal() }, '取消'),
+					' ',
+					E('button', { 'type': 'button', 'class': 'cbi-button cbi-button-action', 'click': () => {
+						ui.hideModal();
+						runAcceleration(null, items);
+					} }, '确认优化')
+				])
+			]);
+		}
+
+		async function runAcceleration(plan, items = []) {
 			if (busy || accelerating) return;
 			accelerating = true;
 			speedPanel.hidden = false;
 			speedButton.setAttribute('aria-expanded', 'true');
 			dom.content(speedContent, E('p', { 'role': 'status', 'class': 'srd-accel-copy' },
-				plan ? '正在回收并复查缓存占用。' : '正在采样设备资源和可回收缓存。'));
+				plan ? '正在回收并复查缓存占用。' : items.length ?
+					'正在优化选中服务并复测网络。' : '正在读取进程、自启动和缓存。'));
 			update();
 			let result;
+			const serviceResults = [];
 			try {
 				if (plan) result = await applyAcceleration(true, plan.token);
+				for (const [index, item] of items.entries()) {
+					speedContent.firstChild.textContent = '正在处理 ' + (index + 1) + '/' + items.length + ' · ' + item.label;
+					let outcome;
+					try {
+						outcome = await optimizeService(true, item.id, item.token, item.stop, item.disable);
+					} catch {
+						outcome = { state: 'attention', detail: '未取得服务复测结果，请核对启动状态。' };
+					}
+					serviceResults.push({ ...outcome, label: item.label });
+					if (outcome.state !== 'applied') {
+						if (index < items.length - 1) serviceResults.push({ label: '后续项目', detail: '已暂停执行。' });
+						break;
+					}
+				}
 				const next = await accelerationPlan();
 				if (!next || typeof next.state !== 'string') throw new Error('invalid acceleration plan');
 				const confirm = next.state === 'ready' && next.token && L.hasViewPermission() ?
 					() => runAcceleration(next) : null;
-				dom.content(speedContent, renderAcceleration(next, result, confirm));
+				const onOptimize = L.hasViewPermission() ? confirmOptimization : null;
+				dom.content(speedContent, renderAcceleration(next, result, confirm, onOptimize, serviceResults));
 			}
 			catch (error) {
-				const message = result?.detail || '暂时无法取得加速结果。请检查登录状态后重试。';
+				const message = serviceResults.length ? serviceResults.map(entry => entry.label + '：' + entry.detail).join(' ') :
+					result?.detail || '暂时无法取得加速结果。请检查登录状态后重试。';
 				dom.content(speedContent, E('p', { 'role': 'status', 'class': 'srd-accel-copy' }, message));
 				console.error(error);
 			}

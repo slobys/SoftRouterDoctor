@@ -2,7 +2,7 @@
 
 case "$1:$2" in
 	list:)
-		printf '%s\n' '{"status":{},"scan":{},"scanLocal":{},"repairDns":{"confirm":true},"accelerationPlan":{},"applyAcceleration":{"confirm":true,"token":""}}' ;;
+		printf '%s\n' '{"status":{},"scan":{},"scanLocal":{},"repairDns":{"confirm":true},"accelerationPlan":{},"applyAcceleration":{"confirm":true,"token":""},"optimizeService":{"confirm":true,"service":"","token":"","stop":true,"disable":true}}' ;;
 	call:status)
 		exec /usr/sbin/soft-router-doctor status ;;
 	call:scan)
@@ -18,6 +18,14 @@ case "$1:$2" in
 			exec /usr/sbin/soft-router-doctor accelerate --apply "$token"
 		fi
 		printf '%s\n' '{"state":"rejected","detail":"请确认回收缓存。"}' ;;
+	call:optimizeService)
+		input=$(cat)
+		param() { printf '%s\n' "$input" | jsonfilter -e "@.$1" 2>/dev/null; }
+		if [ "$(param confirm)" = true ]; then
+			exec /usr/sbin/soft-router-doctor optimize-service "$(param service)" \
+				"$(param token)" "$(param stop)" "$(param disable)"
+		fi
+		printf '%s\n' '{"state":"rejected","detail":"请确认所选服务优化。"}' ;;
 	call:repairDns)
 		if [ "$(jsonfilter -e '@.confirm' 2>/dev/null)" = true ]; then
 			exec /usr/sbin/soft-router-doctor fix-dns --confirm
