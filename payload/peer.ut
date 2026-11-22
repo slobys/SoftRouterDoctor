@@ -1,0 +1,5 @@
+{%
+	http.header('Content-Type', 'application/json; charset=UTF-8');
+	http.header('Cache-Control', 'no-store');
+	http.write(sprintf('%J', { address: http.getenv('REMOTE_ADDR') ?? '' }));
+%}

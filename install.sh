@@ -23,6 +23,7 @@ payload/rpc|/usr/libexec/rpcd/soft-router-doctor|755
 payload/acl.json|/usr/share/rpcd/acl.d/luci-app-soft-router-doctor.json|644
 payload/menu.json|/usr/share/luci/menu.d/luci-app-soft-router-doctor.json|644
 payload/view.js|/www/luci-static/resources/view/status/soft-router-doctor.js|644
+payload/peer.ut|/usr/share/ucode/luci/template/soft-router-doctor-peer.ut|644
 install.sh|/usr/share/soft-router-doctor/manage.sh|755
 FILES
 }

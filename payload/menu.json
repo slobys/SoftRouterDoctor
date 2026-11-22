@@ -9,5 +9,14 @@
     "depends": {
       "acl": ["luci-app-soft-router-doctor"]
     }
+  },
+  "admin/status/soft-router-doctor/peer": {
+    "action": {
+      "type": "template",
+      "path": "soft-router-doctor-peer"
+    },
+    "depends": {
+      "acl": ["luci-app-soft-router-doctor-topology"]
+    }
   }
 }

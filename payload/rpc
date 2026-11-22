@@ -2,11 +2,12 @@
 
 case "$1:$2" in
 	list:)
-		printf '%s\n' '{"status":{},"networkMap":{},"discoverRouters":{"listenOnly":true},"scan":{},"scanLocal":{},"repairDns":{"confirm":true},"accelerationPlan":{},"applyAcceleration":{"confirm":true,"token":""},"optimizeService":{"confirm":true,"service":"","token":"","stop":true,"disable":true}}' ;;
+		printf '%s\n' '{"status":{},"networkMap":{"peer":""},"discoverRouters":{"listenOnly":true},"scan":{},"scanLocal":{},"repairDns":{"confirm":true},"accelerationPlan":{},"applyAcceleration":{"confirm":true,"token":""},"optimizeService":{"confirm":true,"service":"","token":"","stop":true,"disable":true}}' ;;
 	call:status)
 		exec /usr/sbin/soft-router-doctor status ;;
 	call:networkMap)
-		exec /usr/sbin/soft-router-doctor topology ;;
+		peer=$(jsonfilter -e '@.peer' 2>/dev/null)
+		exec /usr/sbin/soft-router-doctor topology "$peer" ;;
 	call:discoverRouters)
 		if [ "$(jsonfilter -e '@.listenOnly' 2>/dev/null)" = true ]; then
 			exec /usr/sbin/soft-router-doctor discover-routers --listen-only

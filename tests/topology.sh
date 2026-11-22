@@ -9,8 +9,7 @@ export SRD_TOPOLOGY_FIXTURE="$fixture"
 mkdir "$fixture/bin"
 
 sed -e "s|^PATH=|PATH=$fixture/bin:|" \
-	-e "s|^LEASE_FILE=.*|LEASE_FILE=$fixture/leases|" \
-	-e "s|^CLIENT_PATH_REPORT=.*|CLIENT_PATH_REPORT=$fixture/no-client-report|" "$root/payload/doctor" > "$fixture/doctor"
+	-e "s|^LEASE_FILE=.*|LEASE_FILE=$fixture/leases|" "$root/payload/doctor" > "$fixture/doctor"
 
 cat > "$fixture/bin/mock" <<'MOCK'
 #!/bin/sh
@@ -28,6 +27,13 @@ case "${0##*/}:$*" in
 	'ip:-4 route show default')
 		printf '%s\n' 'default dev pppoe-wan metric 90' 'default via 192.0.2.254 dev br-lan metric 20' ;;
 	'ip:-6 route show default') if [ -f "$SRD_TOPOLOGY_FIXTURE/route-error" ]; then exit 1; fi ;;
+	'ip:-4 route get 127.0.0.1') echo 'local 127.0.0.1 dev lo src 127.0.0.1' ;;
+	'ip:-4 route get 192.0.2.11') echo '192.0.2.11 dev br-lan src 192.0.2.1' ;;
+	'ip:-6 route get 2001:db8::11') echo '2001:db8::11 dev br-lan src 2001:db8::1' ;;
+	'ip:-4 route get 203.0.113.72') echo '203.0.113.72 via 192.0.2.11 dev br-lan src 192.0.2.1' ;;
+	'ip:-4 neigh show to 192.0.2.11 dev br-lan') echo '192.0.2.11 lladdr 02:00:00:00:00:11 REACHABLE' ;;
+	'ip:-6 neigh show to 2001:db8::11 dev br-lan') echo '2001:db8::11 lladdr 02:00:00:00:00:11 STALE' ;;
+	'iw:dev') printf 'Interface wlan1\n\ttype mesh point\nInterface wlan0\n\ttype AP\n' ;;
 	'ip:neigh show dev br-lan')
 		printf '%s\n' '192.0.2.11 lladdr 02:00:00:00:00:11 REACHABLE' \
 			'2001:db8::11 lladdr 02:00:00:00:00:11 STALE' \
@@ -39,7 +45,7 @@ case "${0##*/}:$*" in
 esac
 MOCK
 chmod +x "$fixture/bin/mock"
-for program in ip ubus uci; do ln -s mock "$fixture/bin/$program"; done
+for program in ip ubus uci iw; do ln -s mock "$fixture/bin/$program"; done
 cat > "$fixture/leases" <<'LEASES'
 4102444800 02:00:00:00:00:11 192.0.2.11 phone *
 4102444800 02:00:00:00:00:12 192.0.2.12 printer *
@@ -74,3 +80,20 @@ touch "$fixture/route-error"
 report=$(sh "$fixture/doctor" topology)
 expect "$(value '@.outlets[1].readable')" false
 echo 'PASS: a failed route read remains distinct from an unconfigured IPv6 route'
+
+report=$(sh "$fixture/doctor" topology 192.0.2.11)
+expect "$(value '@.browser_peer.state')" neighbor_observed
+expect "$(value '@.browser_peer.host')" phone
+expect "$(value '@.wireless_modes[0]')" ap
+expect "$(value '@.wireless_modes[1]')" mesh
+report=$(sh "$fixture/doctor" topology 2001:db8::11)
+expect "$(value '@.browser_peer.state')" neighbor_observed
+expect "$(value '@.browser_peer.address')" 2001:db8::11
+report=$(sh "$fixture/doctor" topology 203.0.113.72)
+expect "$(value '@.browser_peer.state')" routed
+expect "$(value '@.browser_peer.next_hop')" 192.0.2.11
+report=$(sh "$fixture/doctor" topology 127.0.0.1)
+expect "$(value '@.browser_peer.state')" outside
+report=$(sh "$fixture/doctor" topology 'invalid peer')
+expect "$(value '@.browser_peer.state')" unavailable
+echo 'PASS: IPv4 and IPv6 direct peers, routed next hop, loopback and invalid source'

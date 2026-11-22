@@ -9,7 +9,6 @@ mkdir "$scratch/bin"
 : > "$scratch/leases"
 sed -e "s|^PATH=|PATH=$scratch/bin:|" \
 	-e "s|^LEASE_FILE=.*|LEASE_FILE=$scratch/leases|" \
-	-e "s|^CLIENT_PATH_REPORT=.*|CLIENT_PATH_REPORT=$scratch/client.json|" \
 	"$base/payload/doctor" > "$scratch/doctor"
 
 cat > "$scratch/bin/stub" <<'STUB'
@@ -27,10 +26,10 @@ case "${0##*/}:$*" in
 		'192.168.97.2 lladdr 02:00:00:00:00:41 REACHABLE' ;;
 	'ip:-4 route show default'|'ip:-6 route show default'|'uci:-q show firewall') ;;
 	'ping:-4 -I br-lan -c 1 -W 1 '*) echo "$8" >> "$SRD_DISCOVERY/probes" ;;
-	'curl:-q -4 -s --noproxy * --interface br-lan --proto =http '*192.168.96.2/) echo '<html><title>Fixture Router</title></html>' ;;
-	'curl:-q -4 -s --noproxy * --interface br-lan --proto =http '*192.168.96.3/) echo '<title>Camera</title>' ;;
+	'curl:-q -4 -fs --noproxy * --interface br-lan --proto =http '*192.168.96.2/) echo '<html><title>Fixture Router</title></html>' ;;
+	'curl:-q -4 -fs --noproxy * --interface br-lan --proto =http '*192.168.96.3/) echo '<title>Camera</title>' ;;
 	'lldpcli:-f keyvalue show neighbors details') echo 'lldp.eth1.chassis.name=Fixture Switch' ;;
-	'tcpdump:-p -i eth1 -enn -tt -vv -l -c 8 -s 512 ether proto 0x88cc and ether dst 01:80:c2:00:00:0e')
+	'tcpdump:-p -i eth1 -enn -tt -vv -x -l -c 40 -s 512 '*0x88cc*0x893a*)
 		cat <<'FRAME'
 1710000050.000001 f4:2a:7d:75:18:0d > 01:80:c2:00:00:0e, ethertype LLDP (0x88cc), length 98
 	Port Description TLV (4), length 5: Wired
@@ -38,6 +37,18 @@ case "${0##*/}:$*" in
 		Management Address length 5, AFI IPv4 (1): 192.168.96.4
 		System  Capabilities [Bridge, WLAN AP] (0x000c)
 		Enabled Capabilities [WLAN AP] (0x0008)
+1710000051.000001 f4:2a:7d:75:18:0d > 01:80:c2:00:00:13, ethertype IEEE1905.1 (0x893a), length 39
+	0x0000:  0000 0000 b2a9 0080 0100 06f4 2a7d 7518  ................
+	0x0010:  0d80 0002 0100 0000 00                   .........
+1710000052.000001 f4:2a:7d:75:18:0e > 01:80:c2:00:00:13, ethertype IEEE1905.1 (0x893a), length 39
+	0x0000:  0000 0000 b2a9 0080 0100 06f4 2a7d 7518  ................
+	0x0010:  0e80 0002 0101 0000 00                   .........
+1710000053.000001 f4:2a:7d:75:18:0f > 01:80:c2:00:00:13, ethertype IEEE1905.1 (0x893a), length 39
+	0x0000:  0000 0000 b2a9 00c0 0100 06f4 2a7d 7518  ................
+	0x0010:  0f80 0002 0101 0000 00                   .........
+1710000054.000001 f4:2a:7d:75:18:10 > 01:80:c2:00:00:13, ethertype IEEE1905.1 (0x893a), length 39
+	0x0000:  0000 0000 b2a9 0080 0100 06f4 2a7d 7518  ................
+	0x0010:  1080 0022 0101                           ......
 FRAME
 		;;
 	*) exit 1 ;;
@@ -57,6 +68,9 @@ test "$(field '@.lldp[0].address')" = 192.168.96.4
 test "$(field '@.lldp[0].capabilities')" = 'WLAN AP'
 test "$(field '@.lldp[0].advertised_port')" = Wired
 test "$(field '@.lldp[0].mac')" = 'f4:2a:7d:75:18:0d'
+test "$(field '@.mesh[0].role')" = controller
+test "$(field '@.mesh[1].role')" = agent
+test -z "$(field '@.mesh[2].role' || true)"
 test -z "$(field '@.routers[1].title' || true)"
 test "$(sort "$scratch/probes")" = "$(printf '%s\n' 192.168.96.2 192.168.96.3 192.168.96.4 192.168.96.5 192.168.96.6)"
 echo 'PASS: bounded private-subnet discovery, local interface binding and router identity without hostname input'
@@ -69,10 +83,7 @@ test "$(field '@.lldp[0].name')" = 'Fixture AP'
 test ! -s "$scratch/probes"
 echo 'PASS: LLDP retry sends no active network probes'
 
-printf '%s\n' '{"schema":"srd-windows-path-1","source_ipv4":"192.168.96.6","first_hop":"192.168.96.1","hops":["192.168.96.1"],"link_neighbors":[{"mac":"02:00:00:00:00:89","name":"PC-Side AP","address":"192.168.96.5","capabilities":"WLAN AP"}]}' > "$scratch/client.json"
 answer=$(sh "$scratch/doctor" topology)
 test "$(field '@.lldp[0].port')" = eth1
 test "$(field '@.lldp[0].name')" = 'Fixture Switch'
-test "$(field '@.client_path.first_hop')" = '192.168.96.1'
-test "$(field '@.client_path.link_neighbors[0].name')" = 'PC-Side AP'
-echo 'PASS: LLDP observations and a locally stored Windows report remain separate evidence'
+echo 'PASS: LLDP daemon fallback and distinct IEEE 1905.1 controller and agent observations'
