@@ -6,13 +6,16 @@ export PATH
 
 REVISION_FILE=/usr/share/soft-router-doctor/installed
 REPAIR_LOCK=/var/lock/soft-router-doctor-repair
+APK_CACHE=/var/cache/apk
+APK_CUSTOM_CACHE=/etc/apk/cache
+APK_DB_LOCK=/lib/apk/db/lock
 
 field() {
 	printf '%s\n' "$1" | jsonfilter -e "$2" 2>/dev/null
 }
 
 identity() {
-	json_add_string version '0.2.0-dev'
+	json_add_string version '0.3.0-dev'
 	IFS= read -r revision 2>/dev/null < "$REVISION_FILE" || revision=uninstalled
 	json_add_string revision "$revision"
 }
@@ -210,8 +213,17 @@ check_dns_service() {
 	fi
 }
 
+memory_percent() {
+	awk '/^MemTotal:/ { total = $2 } /^MemAvailable:/ { free = $2 }
+		END { if (total && free ~ /^[0-9]+$/) print int(free / total * 100) }' /proc/meminfo
+}
+
+writable_path() {
+	if [ -d /overlay ]; then printf '/overlay\n'; else printf '/\n'; fi
+}
+
 check_resources() {
-	usage=$(df -Pk /overlay 2>/dev/null | awk 'NR == 2 { print $5 }')
+	usage=$(df -Pk "$(writable_path)" 2>/dev/null | awk 'NR == 2 { print $5 }')
 	[ -n "$usage" ] || usage=$(df -Pk / 2>/dev/null | awk 'NR == 2 { print $5 }')
 	percent=$(printf '%s\n' "$usage" | awk '/^[0-9]+%$/ { sub(/%$/, ""); print }')
 	if [ -z "$percent" ]; then
@@ -222,8 +234,7 @@ check_resources() {
 		check storage passed "系统可写分区或根分区使用率为 $percent%。"
 	fi
 
-	available=$(awk '/^MemTotal:/ { total = $2 } /^MemAvailable:/ { free = $2 } \
-		END { if (total && free ~ /^[0-9]+$/) print int(free / total * 100) }' /proc/meminfo)
+	available=$(memory_percent)
 	if [ -z "$available" ]; then
 		check memory skipped '内核未提供可用内存估算。'
 	elif [ "$available" -le 10 ]; then
@@ -417,10 +428,201 @@ repair_dns() {
 	repair_result unverified '已尝试启动，DNS 查询仍未通过。请检查 dnsmasq 日志或上游 DNS，并复测局域网客户端。'
 }
 
+cpu_counters() {
+	awk '$1 == "cpu" {
+		for (i = 2; i <= 9; i++) total += $i
+		printf "%.0f %.0f %.0f\n", total, $5, $6
+		exit
+	}' /proc/stat
+}
+
+sample_performance() {
+	local first second writable
+	first=$(cpu_counters)
+	sleep 1
+	second=$(cpu_counters)
+	cpu_usage=$(awk -v first="$first" -v second="$second" 'BEGIN {
+		split(first, a, " "); split(second, b, " ")
+		count = b[1] - a[1]
+		busy = count - (b[2] - a[2]) - (b[3] - a[3])
+		wait = b[3] - a[3]
+		if (a[1] && count > 0 && busy >= 0 && busy <= count && wait >= 0 && wait <= count)
+			printf "%.0f %.0f", 100 * busy / count, 100 * wait / count
+	}')
+	cpu_busy=${cpu_usage%% *}
+	cpu_wait=${cpu_usage##* }
+	mem_available=$(memory_percent)
+	writable=$(writable_path)
+	storage_free=$(df -Pk "$writable" 2>/dev/null | awk 'NR == 2 && $4 ~ /^[0-9]+$/ { print $4 }')
+}
+
+cache_occupancy() {
+	local usage
+	usage=$(timeout 4 du -sk "$cache_dir" 2>/dev/null) || return 1
+	printf '%s\n' "$usage" | awk '$1 ~ /^[0-9]+$/ { print $1; exit }'
+}
+
+cache_signature() {
+	[ ! -L "$1" ] && [ -f "$1" ] || return 1
+	stat -c '%i:%s:%Y:%u:%h' "$1" 2>/dev/null
+}
+
+inspect_cache() {
+	local version directory mode output names candidate signature
+	plan_state=unavailable
+	plan_detail='当前只支持 apk 3 的默认缓存目录。'
+	plan_count=0
+	plan_token=
+	plan_entries=
+	cache_kib=
+	cache_temporary=0
+	command -v apk >/dev/null 2>&1 || return 0
+	version=$(apk --version 2>/dev/null)
+	case "$version" in 'apk-tools 3.'*) ;; *) return 0 ;; esac
+	if [ -e "$APK_CUSTOM_CACHE" ] || [ -L "$APK_CUSTOM_CACHE" ]; then
+		plan_detail='检测到自定义 APK 缓存，保留其中的离线安装文件。'
+		return 0
+	fi
+	cache_dir=$(readlink -f "$APK_CACHE" 2>/dev/null)
+	case "$cache_dir" in
+		/tmp/cache/apk) cache_temporary=1 ;;
+		/var/cache/apk) ;;
+		*) return 0 ;;
+	esac
+	for directory in "${cache_dir%/*}" "$cache_dir"; do
+		mode=$(stat -c '%u %a' "$directory" 2>/dev/null)
+		case "$mode" in '0 '[0-7][0145][0145]) ;; *) return 0 ;; esac
+	done
+	cache_kib=$(cache_occupancy)
+	if [ -z "$cache_kib" ]; then
+		plan_detail='暂时无法读取 APK 缓存的占用。'
+		return 0
+	fi
+	if ! command -v flock >/dev/null 2>&1 || [ -L "$APK_DB_LOCK" ] || [ ! -f "$APK_DB_LOCK" ]; then
+		plan_detail='未检测到可用的 APK 数据库锁，跳过回收。'
+		return 0
+	fi
+	if pidof apk >/dev/null 2>&1; then
+		plan_state=busy
+		plan_detail='软件包管理器正在运行，完成后可重新检查。'
+		return 0
+	fi
+	output=$(LC_ALL=C APK_CONFIG=/dev/null timeout 6 apk \
+		--no-network --no-logfile --cache-dir "$cache_dir" -vv --simulate cache clean 2>&1) || {
+		plan_detail='APK 无法确认过期缓存，回收已跳过。'
+		return 0
+	}
+	names=$(printf '%s\n' "$output" | LC_ALL=C awk '
+		/^deleting APKINDEX\.[[:xdigit:]]{8}\.tar\.gz$/ ||
+		/^deleting [A-Za-z0-9][A-Za-z0-9_.+-]*-[0-9][A-Za-z0-9_.+-]*\.[[:xdigit:]]{8}\.apk$/ {
+			print substr($0, 10)
+		}' | LC_ALL=C sort -u)
+	plan_entries=$(printf '%s\n' "$names" | while IFS= read -r candidate; do
+		[ -n "$candidate" ] || continue
+		signature=$(cache_signature "$cache_dir/$candidate") || continue
+		case "$signature" in *:0:1) printf '%s %s\n' "$candidate" "$signature" ;; esac
+	done)
+	if [ -z "$plan_entries" ]; then
+		plan_state=empty
+		plan_detail='暂无符合条件的过期 APK 缓存。'
+		return 0
+	fi
+	plan_count=$(printf '%s\n' "$plan_entries" | awk 'END { print NR }')
+	plan_token=$(printf '%s\n' "$cache_dir" "$plan_entries" | sha256sum)
+	plan_token=${plan_token%% *}
+	plan_state=ready
+	plan_detail='软件包管理器确认这些缓存已过期。清理后需要时可重新下载。'
+}
+
+acceleration_plan() {
+	sample_performance
+	inspect_cache
+	json_init
+	json_add_string state "$plan_state"
+	json_add_string detail "$plan_detail"
+	json_add_int cpu_busy "${cpu_busy:--1}"
+	json_add_int cpu_iowait "${cpu_wait:--1}"
+	json_add_int memory_available "${mem_available:--1}"
+	json_add_int storage_free_kib "${storage_free:--1}"
+	json_add_int cache_kib "${cache_kib:--1}"
+	json_add_int candidate_count "$plan_count"
+	json_add_boolean temporary "$cache_temporary"
+	json_add_string token "$plan_token"
+	json_dump
+}
+
+apply_acceleration() (
+	requested=$1
+	case "$requested" in
+		''|*[!a-f0-9]*) repair_result rejected '请重新检查可回收项。'; exit ;;
+	esac
+	if [ "${#requested}" -ne 64 ] || [ -L "$APK_DB_LOCK" ] || [ ! -f "$APK_DB_LOCK" ]; then
+		repair_result rejected '请重新检查可回收项。'
+		exit
+	fi
+	if ! flock -n 9; then
+		repair_result busy '软件包数据库正在使用，暂缓回收。'
+		exit
+	fi
+	inspect_cache
+	if [ "$plan_state" != ready ]; then
+		repair_result "$plan_state" "$plan_detail"
+		exit
+	fi
+	if [ "$requested" != "$plan_token" ]; then
+		repair_result changed '缓存内容已变化，请检查新清单后再确认。'
+		exit
+	fi
+
+	removed=0
+	while IFS=' ' read -r candidate signature; do
+		path="$cache_dir/$candidate"
+		if [ "$(cache_signature "$path")" = "$signature" ] && rm -- "$path" 2>/dev/null; then
+			removed=$((removed + 1))
+		fi
+	done <<EOF
+$plan_entries
+EOF
+	after=$(cache_occupancy)
+	reclaimed=-1
+	if [ -n "$after" ]; then
+		reclaimed=$((cache_kib - after))
+		[ "$reclaimed" -ge 0 ] || reclaimed=0
+	fi
+	json_init
+	if [ "$removed" -eq "$plan_count" ]; then
+		json_add_string state applied
+		json_add_string detail '已回收过期 APK 缓存。'
+	elif [ "$removed" -gt 0 ]; then
+		json_add_string state partial
+		json_add_string detail '已回收部分缓存。其余文件已变化或无法删除，请重新检查。'
+	else
+		json_add_string state rejected
+		json_add_string detail '本次未删除缓存，请重新检查。'
+	fi
+	json_add_int removed "$removed"
+	json_add_int reclaimed_kib "$reclaimed"
+	json_add_boolean temporary "$cache_temporary"
+	json_dump
+) 9< "$APK_DB_LOCK" 2>/dev/null
+
+if [ "$1" = accelerate ]; then
+	case "$#" in
+		1) acceleration_plan; exit ;;
+		3) if [ "$2" = --apply ]; then
+				if [ -r "$APK_DB_LOCK" ]; then
+					apply_acceleration "$3" && exit
+				fi
+				repair_result busy '无法锁定软件包数据库，请重新检查。'
+				exit
+			fi ;;
+	esac
+fi
+
 case "$*" in
 	scan) scan online ;;
 	'scan --local') scan local ;;
 	status) json_init; identity; json_dump ;;
 	'fix-dns --confirm') repair_dns ;;
-	*) echo 'Usage: soft-router-doctor {scan [--local]|status|fix-dns --confirm}' >&2; exit 2 ;;
+	*) echo 'Usage: soft-router-doctor {scan [--local]|status|fix-dns --confirm|accelerate [--apply TOKEN]}' >&2; exit 2 ;;
 esac
