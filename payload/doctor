@@ -25,7 +25,7 @@ field() {
 }
 
 identity() {
-	json_add_string version '0.15.0-dev'
+	json_add_string version '0.16.0-dev'
 	IFS= read -r revision 2>/dev/null < "$REVISION_FILE" || revision=uninstalled
 	json_add_string revision "$revision"
 }

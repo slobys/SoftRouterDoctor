@@ -74,7 +74,7 @@ const styles = [
 	'.srd-root{--ink:#152c3c;--muted:#435e6e;--line:#cbdbe2;--paper:#fff;--wash:#edf5f8;--quiet:#f5f8fa;--subtle:#d6e6ec;--accent:#075873;--accent-hover:#06465d;--accent-ink:#fff;--good:#176149;--warn:#805017;--bad:#a33d24;max-width:1150px;margin:0 auto 30px;font:inherit;color:var(--ink)}',
 	'.srd-root *{box-sizing:border-box}.srd-root ::selection{background:var(--subtle);color:var(--ink)}',
 	'.srd-root :is(h2,h3,h4){margin:0;padding:0;border:0;box-shadow:none;background:none}.srd-root p{margin:0}.srd-root p{line-height:1.62}.srd-root [hidden]{display:none!important}',
-	'.srd-hero{display:grid;grid-template-columns:minmax(0,1fr) 190px;gap:28px;align-items:center;padding:28px 32px;background:var(--wash);border:1px solid var(--line);border-radius:16px}',
+	'.srd-hero{display:grid;grid-template-columns:minmax(0,1fr) 190px;gap:28px;align-items:center;padding:28px 32px;background:var(--wash);border:1px solid var(--line);border-radius:16px}.srd-hero:has(.srd-dial[hidden]){grid-template-columns:minmax(0,1fr)}',
 	'.srd-root .srd-title{font-size:1.85rem;font-weight:750;letter-spacing:-.03em;line-height:1.2;margin-bottom:8px;color:var(--ink)}',
 	'.srd-root .srd-hero-message{max-width:52ch;color:var(--muted);font-size:1rem}',
 	'.srd-actions{display:flex;flex-wrap:wrap;gap:9px;align-items:center;margin:19px 0 11px}',
@@ -84,6 +84,7 @@ const styles = [
 	'.srd-root .srd-primary:hover:not(:disabled){background:var(--accent-hover);border-color:var(--accent-hover)}',
 	'.srd-root button:disabled{opacity:.58;cursor:default}.srd-root :is(button,summary):focus-visible{outline:2px solid var(--accent);outline-offset:3px}',
 	'.srd-root .srd-meta{color:var(--muted);font-size:.82rem;overflow-wrap:anywhere}',
+	'.srd-root .srd-meta:empty{display:none}.srd-hero-tools{grid-column:1/-1;margin-top:7px}.srd-hero-tools summary{width:fit-content;cursor:pointer;color:var(--accent);font-weight:650}.srd-hero-tools .srd-actions{margin:8px 0}.srd-hero-tools:not([open])>.srd-actions{display:none}',
 	'.srd-dial{display:grid;width:156px;height:156px;place-items:center;justify-self:center;position:relative;border-radius:50%;background:conic-gradient(var(--dial,var(--accent)) var(--fill,0%),var(--subtle) 0);color:var(--ink)}',
 	'.srd-dial::before{content:"";position:absolute;inset:9px;border-radius:50%;background:var(--wash)}',
 	'.srd-dial[data-state="good"]{--dial:var(--good)}.srd-dial[data-state="review"]{--dial:var(--warn)}',
@@ -134,6 +135,8 @@ const styles = [
 	'.srd-website-result{padding:9px 11px;background:var(--quiet);border-radius:7px;overflow-wrap:anywhere}.srd-website-families{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:10px 22px;margin-top:12px}.srd-website-families section{min-width:0}.srd-website-families section>p{overflow-wrap:anywhere}.srd-website-steps{margin:5px 0 0}.srd-website-steps>div{display:grid;grid-template-columns:minmax(80px,.8fr) minmax(0,2fr);gap:4px 10px;padding:7px 0;border-top:1px solid var(--line)}.srd-website-steps dt{font-size:.83rem;color:var(--ink)}.srd-website-steps dd{margin:0;min-width:0}.srd-website-steps .srd-chip{white-space:normal;overflow-wrap:anywhere}',
 	'.srd-lan-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));gap:8px;margin:10px 0}.srd-lan-form label{display:grid;gap:4px;min-width:0;font-size:.85rem;font-weight:650}.srd-root .srd-lan-form :is(select,input){width:100%;max-width:100%;min-width:0;min-height:44px;border:1px solid var(--line);border-radius:8px;padding:7px 9px;background-color:var(--paper);color:var(--ink)}.srd-root .srd-lan-form :is(select,input):focus-visible{outline:2px solid var(--accent);outline-offset:1px}.srd-root .srd-lan-form input[aria-invalid=true]{border-color:var(--bad)}.srd-lan-form .srd-primary{align-self:end;justify-self:start}.srd-lan-details dd{overflow-wrap:anywhere;color:var(--ink)}',
 	'.srd-terminal{margin-top:16px}.srd-terminal .srd-rank-title{margin-bottom:5px}.srd-terminal .srd-website-steps{margin:8px 0}.srd-terminal .srd-terminal-line{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:baseline}.srd-terminal details{margin-top:8px}.srd-terminal summary{cursor:pointer}.srd-terminal code{overflow-wrap:anywhere;user-select:all}',
+	'.srd-share-addresses{display:grid;gap:8px;margin:10px 0}.srd-share-address{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 8px;align-items:center;max-width:520px}.srd-share-address span{grid-column:1/-1}.srd-root .srd-share-address :is(input,button){margin:0}.srd-root .srd-share-address input{width:100%;min-width:0;min-height:44px;padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--paper);color:var(--ink)}.srd-root .srd-share-address input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}.srd-share-addresses p:empty{display:none}',
+	'@media(max-width:560px){.srd-share-address{grid-template-columns:minmax(0,1fr)}.srd-share-address .srd-button{justify-self:start}}',
 	'.srd-path-evidence{margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}.srd-path-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:6px 0}.srd-root .srd-path-fact{font-size:.92rem;margin-top:8px}.srd-path-devices{list-style:none;padding:0;margin:4px 0 0}.srd-path-devices li{padding:8px 0;border-top:1px solid var(--line);overflow-wrap:anywhere}.srd-root .srd-path-actions p{margin:0}.srd-mode-label{display:inline-block;margin-inline-start:10px;font-size:.8rem;color:var(--accent);font-weight:600}',
 	'.srd-root .srd-pc-path{display:flex;flex-wrap:wrap;gap:8px;list-style:none;margin:10px 0;padding:0}.srd-pc-path li{display:grid;align-content:start;gap:3px;flex:1 1 136px;min-width:0;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:var(--quiet);overflow-wrap:anywhere}.srd-pc-path li[data-state=unknown]{border-style:dashed;background:transparent}.srd-pc-path strong{font-size:.84rem;color:var(--ink)}.srd-pc-path li span{font-size:.77rem;color:var(--muted)}',
 	'.srd-map-clients{margin:0;padding:0;list-style:none}.srd-map-clients li{display:flex;align-items:baseline;justify-content:space-between;gap:6px;padding:6px 0;border-top:1px solid var(--line)}.srd-map-clients li>div{min-width:0}.srd-map-clients strong{font-size:.87rem}',
@@ -548,12 +551,14 @@ const lanDnsStates = {
 	unavailable: '未取得结果'
 };
 
-function renderLanDns(data) {
+function renderLanDns(data, tryShare) {
 	const { router, observed } = data;
 	const names = observed.packets.filter(row => row.sample === 'name');
 	const distinct = names.find(row => row.type === 'A' && ['nxdomain', 'no_records'].includes(row.status));
 	const replyInterfaces = [...new Set(names.map(row => row.reply_via).filter(Boolean))];
 	const terminalResolved = names.some(row => row.type === 'A' && row.status === 'answered');
+	const knownAddresses = [...new Set([...router.loopback_name.addresses, ...router.lan_name.addresses])];
+	const knownAddress = knownAddresses.length === 1 && privateIPv4(knownAddresses[0]) ? knownAddresses[0] : '';
 	const title = distinct && router.loopback_name.state === 'answered' ?
 		terminalResolved ? '当前终端收到了不同的名称答复' : '本地记录存在，终端收到不同答复' :
 		router.loopback_name.state === 'answered' ? '软路由本机能解析该名称' :
@@ -574,6 +579,10 @@ function renderLanDns(data) {
 		E('div', { class: 'srd-website-result' }, [
 			text('strong', title), text('p', data.name, 'srd-map-meta')
 		]),
+		knownAddress ? E('div', { class: 'srd-path-actions' }, [
+			button('检查并获取共享地址', () => tryShare(knownAddress, data.name)),
+			text('span', '若这是 NAS，可尝试用 ' + knownAddress + ' 连接，绕过设备名。', 'srd-map-meta')
+		]) : '',
 		E('dl', { class: 'srd-website-steps srd-lan-details' }, rows.map(([label, server, result]) =>
 			E('div', {}, [text('dt', label), E('dd', {}, [
 				text('span', server + ' · ' + lanDnsStates[result.state]),
@@ -1360,7 +1369,32 @@ function smbTerminalFinding(ip, byName) {
 	return outcomes[ip] || ['等待终端复核', '浏览器无法读取文件管理器的连接和登录结果。'];
 }
 
-function renderSmbAccess(data, openLanDns) {
+async function copyShareAddress(field, status) {
+	if (navigator.clipboard?.writeText) {
+		try {
+			await navigator.clipboard.writeText(field.value);
+			status.textContent = '已复制地址。请粘贴到文件管理器。';
+			return;
+		} catch { /* Local LuCI may use HTTP or browser clipboard access may be denied. */ }
+	}
+	field.focus();
+	field.select();
+	let copied = false;
+	try { copied = document.execCommand('copy'); } catch { /* Leave the address selected for manual copy. */ }
+	status.textContent = copied ? '已复制地址。请粘贴到文件管理器。' : '地址已选中，可手动复制。';
+}
+
+function shareAddressRow(label, copyLabel, address, status) {
+	const field = E('input', { type: 'text', readonly: true, value: address,
+		'aria-label': label + '共享地址', spellcheck: 'false' });
+	return E('div', { class: 'srd-share-address' }, [
+		text('span', label, 'srd-map-meta'),
+		field,
+		button(copyLabel, () => copyShareAddress(field, status))
+	]);
+}
+
+function renderSmbAccess(data, openLanDns, retest) {
 	const { service, target } = data;
 	const protocol = data.smb || {};
 	const name = data.name || {};
@@ -1383,12 +1417,33 @@ function renderSmbAccess(data, openLanDns) {
 		list_missing: '手输名称能打开，网络列表里找不到'
 	}).map(([value, label]) => E('option', { value }, label)));
 	const finding = E('div', { class: 'srd-website-result', 'aria-live': 'polite' });
+	const feedback = E('p', { class: 'srd-map-meta', role: 'status' });
 	function updateFinding() {
 		const [title, detail] = smbTerminalFinding(ip.value, nameResult.value);
 		dom.content(finding, [text('strong', title), text('p', detail, 'srd-map-meta')]);
 	}
 	updateFinding();
 
+	const terminalCheck = E('details', {}, [
+		text('summary', '记录终端复测结果'),
+		E('div', { class: 'srd-lan-form' }, [
+			E('label', {}, ['用 IP 打开时', ip]),
+			E('label', {}, ['用名称或网络列表时', nameResult])
+		]),
+		finding
+	]);
+	const portOpen = service.tcp === 'open';
+	const action = {
+		refused: ['先检查 NAS 的文件共享服务', '软路由连接 TCP 445 时被拒绝。核对 NAS 是否开启 SMB，以及是否允许局域网访问，然后重新检查。'],
+		timeout: ['先排查 NAS 到软路由的连接', 'TCP 445 没有应答。核对设备是否在线，以及 NAS 或网段的防火墙是否允许该端口。'],
+		failed: ['先排查 NAS 到软路由的连接', '软路由未能连接 TCP 445。请核对所选 IP、SMB 服务和防火墙。'],
+		unavailable: ['从文件管理器复测', '软路由未能验证 TCP 445。可以先用下面的 IP 地址试连。']
+	}[service.tcp] || (protocol.state === 'rejected' ?
+		['先检查 SMB 协议设置', '软路由连上了 TCP 445，NAS 拒绝了协议协商。核对 NAS 的 SMB 2/3 设置后重新检查。'] :
+		['用 IP 试连文件共享', protocol.state === 'confirmed' ?
+			'软路由已确认 SMB 服务响应。把下方地址粘贴到文件管理器，尝试打开原来的共享。' :
+			'TCP 445 已连通，SMB 响应仍待核对。把下方地址粘贴到文件管理器复测。']);
+	const offerAddress = (portOpen && protocol.state !== 'rejected') || service.tcp === 'unavailable';
 	const rows = [
 		['名称与发现', nameTitle, [nameDetail, name.advertised && '目标网段通告 ' + name.advertised].filter(Boolean).join(' · '), '本机名称待核对'],
 		['SMB 端口', ports[service.tcp], negotiation, '本机 TCP 445 待核对'],
@@ -1396,26 +1451,35 @@ function renderSmbAccess(data, openLanDns) {
 	];
 	return E('section', { class: 'srd-terminal', 'aria-labelledby': 'srd-smb-title' }, [
 		E('h4', { class: 'srd-rank-title', id: 'srd-smb-title' }, 'NAS 文件共享'),
-		E('dl', { class: 'srd-website-steps srd-lan-details' }, rows.map(([label, value, detail, pending]) =>
-			E('div', {}, [text('dt', label), E('dd', {}, [
-				E('div', { class: 'srd-terminal-line' }, [text('span', value), chip('skipped', pending)]),
-				detail ? text('span', detail, 'srd-map-meta') : ''
-			])]))),
-		name.method === 'dns' && name.query ? button('检查局域网 DNS', () => openLanDns(name.query)) : '',
+		E('div', { class: 'srd-website-result' }, [text('strong', action[0]), text('p', action[1], 'srd-map-meta')]),
+		offerAddress ? E('div', { class: 'srd-share-addresses' }, [
+			shareAddressRow('Windows 文件资源管理器', '复制 Windows 地址', '\\\\' + target.address, feedback),
+			shareAddressRow('手机 / macOS 的 SMB 客户端', '复制 SMB 地址', 'smb://' + target.address, feedback),
+			feedback
+		]) : '',
+		E('div', { class: 'srd-path-actions' }, [
+			offerAddress ? button('已打开共享', () => {
+				ip.value = 'opened';
+				updateFinding();
+				terminalCheck.open = true;
+			}, true) : '',
+			offerAddress ? button('还是打不开', () => { terminalCheck.open = true; ip.focus(); }) : '',
+			button('重新检查', retest)
+		]),
+		terminalCheck,
 		E('details', {}, [
-			text('summary', '用 IP 核对并判断故障'),
-			E('p', {}, ['在 Windows 文件资源管理器输入 ', text('code', '\\\\' + target.address),
-				'，在手机 SMB 客户端或 macOS 输入 ', text('code', 'smb://' + target.address), '。请尝试打开原来失败的共享。']),
-			E('div', { class: 'srd-lan-form' }, [
-				E('label', {}, ['用 IP 打开时', ip]),
-				E('label', {}, ['用名称或网络列表时', nameResult])
-			]),
-			finding
+			text('summary', '查看名称、端口和权限证据'),
+			E('dl', { class: 'srd-website-steps srd-lan-details' }, rows.map(([label, value, detail, pending]) =>
+				E('div', {}, [text('dt', label), E('dd', {}, [
+					E('div', { class: 'srd-terminal-line' }, [text('span', value), chip('skipped', pending)]),
+					detail ? text('span', detail, 'srd-map-meta') : ''
+				])]))),
+			name.method === 'dns' && name.query ? button('检查局域网 DNS', () => openLanDns(name.query)) : ''
 		])
 	]);
 }
 
-function renderLanAccess(data, terminal, openLanDns) {
+function renderLanAccess(data, terminal, openLanDns, retest) {
 	const { source, target, service } = data;
 	const endpoint = item => [item.address, item.interface, item.zone && '防火墙区 ' + item.zone, item.subnet]
 		.filter(Boolean).join(' · ') || '未取得';
@@ -1443,16 +1507,21 @@ function renderLanAccess(data, terminal, openLanDns) {
 		service.port && service.profile !== 'smb' && ['服务端口', 'TCP ' + service.port + ' ' + tcp[service.tcp]],
 		service.profile !== 'smb' && discovery[service.mdns] && ['自动发现', discovery[service.mdns]]
 	].filter(Boolean);
-	return [
+	const evidence = [
 		E('div', { class: 'srd-website-result' }, [
 			text('strong', lanSummary(data)),
 			text('p', relationship, 'srd-map-meta')
 		]),
 		E('dl', { class: 'srd-website-steps srd-lan-details' }, rows.map(([label, value]) =>
 			E('div', {}, [text('dt', label), text('dd', value)]))),
-		text('p', '上方的 Ping、ARP 和服务发现由软路由测得。', 'srd-map-meta'),
-		...(service.profile === 'smb' ? [renderSmbAccess(data, openLanDns), renderTerminalAccess(data, terminal)] : [])
+		text('p', '上方的 Ping、ARP 和服务发现由软路由测得。', 'srd-map-meta')
 	];
+	return service.profile === 'smb' ? [
+		renderSmbAccess(data, openLanDns, retest),
+		E('details', { class: 'srd-terminal' }, [
+			text('summary', '查看网段与网页连通性'), ...evidence, renderTerminalAccess(data, terminal)
+		])
+	] : evidence;
 }
 
 function stageItems(states) {
@@ -1485,8 +1554,8 @@ return view.extend({
 		let repairInFlight = false;
 		let progress = ['ready', 'ready'];
 		const live = E('div', { 'class': 'srd-sr', 'role': 'status', 'aria-live': 'polite' });
-		const summary = text('p', '检查网络出口、DNS、网页访问和系统资源。', 'srd-hero-message');
-		const meta = text('p', '公网断开时，仍可选择只查本机。', 'srd-meta');
+		const summary = text('p', '选择遇到的问题，查看能做的下一步。', 'srd-hero-message');
+		const meta = text('p', '', 'srd-meta');
 		const value = text('strong', '—', 'srd-dial-value');
 		const gaugeLabel = text('span', '待体检', 'srd-dial-label');
 		const dial = E('div', { 'class': 'srd-dial', 'aria-hidden': 'true' }, [
@@ -1503,9 +1572,13 @@ return view.extend({
 		const exportButton = button('下载报告', () => { if (report) downloadReport(report); });
 		const speedButton = button('一键加速', () => runAcceleration());
 		const mapButton = button('网络拓扑', () => runTopology());
-		const qualityButton = button('卡顿诊断', runQuality);
-		const websiteButton = button('网站诊断', openWebsite);
-		const lanButton = button('设备互访', openLan);
+		const qualityButton = button('网速慢', runQuality);
+		const websiteButton = button('某个网站打不开', openWebsite);
+		const lanButton = button('设备互访', () => openLan());
+		const nasButton = button('NAS 连不上', () => openLan('smb', nasButton));
+		let lanOpener = lanButton;
+		nasButton.setAttribute('aria-controls', 'srd-lan-access');
+		nasButton.setAttribute('aria-expanded', 'false');
 		const lanDnsButton = button('局域网 DNS', () => openLanDns());
 		lanDnsButton.setAttribute('aria-controls', 'srd-lan-dns');
 		lanDnsButton.setAttribute('aria-expanded', 'false');
@@ -1572,10 +1645,7 @@ return view.extend({
 		const lanInput = E('input', { type: 'text', inputmode: 'decimal', maxlength: 15,
 			autocomplete: 'off', spellcheck: 'false', placeholder: '例如 192.168.1.50' });
 		const lanManual = E('label', {}, ['设备 IPv4 地址', lanInput]);
-		const lanProfile = E('select', { change: () => {
-			lanNameField.hidden = lanProfile.value !== 'smb';
-			dom.content(lanContent, []);
-		} },
+		const lanProfile = E('select', { change: () => setLanProfile(lanProfile.value) },
 			Object.entries(lanProfiles).map(([id, label]) => E('option', { value: id }, label)));
 		const lanName = E('input', { type: 'text', maxlength: 253, autocomplete: 'off', spellcheck: 'false',
 			placeholder: '例如 NAS 或 nas.local' });
@@ -1587,7 +1657,7 @@ return view.extend({
 			'aria-labelledby': 'srd-lan-title' }, [
 			E('div', { class: 'srd-quality-header' }, [
 				E('h3', { class: 'srd-section-title', id: 'srd-lan-title' }, '设备互访'),
-				button('收起', () => { hideLan(); lanButton.focus(); })
+				button('收起', () => { hideLan(); (lanOpener.getClientRects().length ? lanOpener : otherSummary).focus(); })
 			]),
 			text('p', '手机找不到电视、打印机或 NAS 时，可以检查目标设备的网段、响应和服务发现。', 'srd-accel-copy'),
 			text('p', '排查 NAS 时，在连不上的手机或电脑上打开此页，并选择「NAS / SMB 文件共享」。', 'srd-map-meta'),
@@ -1672,7 +1742,7 @@ return view.extend({
 						if (result.state !== 'running') break;
 					}
 				}
-				dom.content(lanDnsContent, result.state === 'done' ? renderLanDns(result) :
+				dom.content(lanDnsContent, result.state === 'done' ? renderLanDns(result, tryShare) :
 					text('p', result.state === 'running' ? '本轮诊断未在预期时间内完成，请重试。' :
 						result.detail || '本轮未取得诊断结果。', 'srd-accel-copy'));
 			} catch {
@@ -1687,13 +1757,32 @@ return view.extend({
 		function hideLan() {
 			lanPanel.hidden = true;
 			lanButton.setAttribute('aria-expanded', 'false');
+			nasButton.setAttribute('aria-expanded', 'false');
 		}
 
-		async function openLan() {
+		function setLanProfile(profile) {
+			lanProfile.value = profile;
+			lanNameField.hidden = profile !== 'smb';
+			dom.content(lanContent, []);
+		}
+
+		function tryShare(address, name) {
+			openLan('smb', nasButton);
+			lanDevices.value = '';
+			lanManual.hidden = false;
+			lanInput.value = address;
+			lanName.value = name;
+			runLan();
+		}
+
+		async function openLan(profile, opener = lanButton) {
 			if (checkingLanDns || checkingLan || checkingWebsite || measuringQuality || busy || accelerating || mapping) return;
 			hideLanDns();
 			lanPanel.hidden = false;
+			lanOpener = opener;
 			lanButton.setAttribute('aria-expanded', 'true');
+			nasButton.setAttribute('aria-expanded', 'true');
+			if (profile) setLanProfile(profile);
 			hideWebsite();
 			hideQuality();
 			speedPanel.hidden = mapPanel.hidden = true;
@@ -1750,7 +1839,7 @@ return view.extend({
 				if (data.web?.endpoints?.length)
 					dom.content(lanContent, text('p', '软路由检查完成，正在从本机浏览器对照 NAS 网页响应…', 'srd-accel-copy'));
 				const terminal = await checkTerminalWeb(target, data.web);
-				dom.content(lanContent, renderLanAccess(data, terminal, openLanDns));
+				dom.content(lanContent, renderLanAccess(data, terminal, openLanDns, runLan));
 			} catch {
 				dom.content(lanContent, text('p', '暂时无法完成检查，请核对 LuCI 登录状态及拓扑查看权限。', 'srd-accel-copy'));
 			} finally {
@@ -2004,13 +2093,15 @@ return view.extend({
 			primary.textContent = busy ? (repairInFlight ? '正在修复' : '体检中') : report ? '重新体检' : '开始体检';
 			primary.disabled = local.disabled = speedButton.disabled = mapButton.disabled =
 				qualityButton.disabled = qualityAgain.disabled = websiteButton.disabled = websiteSubmit.disabled =
-					lanButton.disabled = lanSubmit.disabled = lanDnsButton.disabled = lanDnsSubmit.disabled =
+					lanButton.disabled = nasButton.disabled = lanSubmit.disabled = lanDnsButton.disabled = lanDnsSubmit.disabled =
 					busy || accelerating || mapping || measuringQuality || checkingWebsite || checkingLan || checkingLanDns;
 			lanDevices.disabled = lanInput.disabled = lanProfile.disabled = lanName.disabled = checkingLan;
 			lanDnsInput.disabled = checkingLanDns;
 			websiteInput.disabled = checkingWebsite;
 			discoverButton.disabled = busy || accelerating || mapping;
 			exportButton.disabled = busy || accelerating || mapping || !report;
+			steps.hidden = !busy && progress.every(state => state === 'ready');
+			dial.hidden = !busy && !report;
 			dom.content(steps, stageItems(progress));
 
 			if (busy) {
@@ -2128,6 +2219,7 @@ return view.extend({
 			}
 		}
 
+		const otherSummary = text('summary', '其他工具');
 		update();
 		return E('div', { 'class': 'srd-root' }, [
 			E('style', {}, styles),
@@ -2137,7 +2229,11 @@ return view.extend({
 					E('div', { 'class': 'srd-hero-intro' }, [
 						E('h2', { 'class': 'srd-title', 'id': 'srd-page-title' }, '软路由体检'), summary
 					]),
-					E('div', { 'class': 'srd-actions' }, [ primary, local, mapButton, lanButton, lanDnsButton, qualityButton, websiteButton, speedButton, exportButton ]),
+					E('div', { 'class': 'srd-actions' }, [primary, nasButton, qualityButton, websiteButton]),
+					E('details', { class: 'srd-hero-tools' }, [
+						otherSummary,
+						E('div', { class: 'srd-actions' }, [local, mapButton, lanButton, lanDnsButton, speedButton, exportButton])
+					]),
 					meta
 				]),
 				dial
