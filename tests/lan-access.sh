@@ -8,8 +8,11 @@ export SRD_LAN_TEST="$scratch"
 mkdir "$scratch/bin"
 sed -e "s|^PATH=|PATH=$scratch/bin:|" \
 	-e "s|^SAVED_TOPOLOGY_LIB=.*|SAVED_TOPOLOGY_LIB=$base/payload/topology.sh|" \
+	-e "s|^LEASE_FILE=.*|LEASE_FILE=$scratch/leases|" \
 	-e "s|^LAN_ACCESS_LIB=.*|LAN_ACCESS_LIB=$scratch/lan-access.sh|" "$base/payload/doctor" > "$scratch/doctor"
-sed "s|^LAN_ACCESS_LOCK=.*|LAN_ACCESS_LOCK=$scratch/lock|" "$base/payload/lan-access.sh" > "$scratch/lan-access.sh"
+sed -e "s|^LAN_ACCESS_LOCK=.*|LAN_ACCESS_LOCK=$scratch/lock|" \
+	-e "s|^LAN_SMB_PROBE=.*|LAN_SMB_PROBE=$base/payload/smb-probe.uc|" "$base/payload/lan-access.sh" > "$scratch/lan-access.sh"
+printf '0 02:01:02:03:04:05 192.168.42.20 NAS *\n' > "$scratch/leases"
 
 cat > "$scratch/bin/stub" <<'STUB'
 #!/bin/sh
@@ -24,6 +27,8 @@ case "${0##*/}:$*" in
 	'uci:-q get firewall.home.network'|'uci:-q get firewall.home.name'|'uci:-q get firewall.permit.dest') echo lan ;;
 	'uci:-q get firewall.visitor.network'|'uci:-q get firewall.visitor.name'|'uci:-q get firewall.permit.src') echo guest ;;
 	'uci:-q get firewall.permit.family') cat "$SRD_LAN_TEST/forward" ;;
+	'uci:-q get dhcp.@dnsmasq[0].domain') echo lan ;;
+	'uci:-q get dhcp.@dnsmasq[0].local') echo /lan/ ;;
 	'ip:-4 route get 192.168.42.'*) printf '%s dev br-lan src 192.168.42.1\n' "$4" ;;
 	'ip:-4 route get 192.168.43.'*) printf '%s dev br-guest src 192.168.43.1\n' "$4" ;;
 	'ip:-4 route get 192.168.99.9') echo '192.168.99.9 via 192.168.42.10 dev br-lan' ;;
@@ -31,6 +36,8 @@ case "${0##*/}:$*" in
 	'ping:'*)
 		printf '%s\n' "$*" >> "$SRD_LAN_TEST/probes"
 		[ ! -f "$SRD_LAN_TEST/silent" ] ;;
+	'ucode:'*'/payload/smb-probe.uc 192.168.42.20 br-lan')
+		if [ -r "$SRD_LAN_TEST/smb" ]; then cat "$SRD_LAN_TEST/smb"; else printf 'confirmed 3.1.1 required'; fi ;;
 	'ucode:'*)
 		for last; do address=$port; port=$device; device=$last; done
 		printf 'tcp %s %s %s\n' "$address" "$port" "$device" >> "$SRD_LAN_TEST/probes"
@@ -39,6 +46,15 @@ case "${0##*/}:$*" in
 		echo '=;br-guest;IPv4;Unequal;_smb._tcp;local;Other.local;192.168.42.20;445;'
 		[ -f "$SRD_LAN_TEST/silent" ] ||
 			echo '=;br-lan;IPv4;NAS;_smb._tcp;local;NAS.local;192.168.42.20;445;' ;;
+	'nslookup:-type=A '*)
+		printf 'dns %s\n' "$2" >> "$SRD_LAN_TEST/probes"
+		printf 'Server: 127.0.0.1\nAddress: 127.0.0.1:53\n\n'
+		case "$2" in
+			nas.lan.) printf 'Name: nas.lan\nAddress: 192.168.42.20\n' ;;
+			wrong.lan.) printf 'Name: wrong.lan\nAddress: 192.168.42.29\n' ;;
+			duplicate.lan.) printf 'Name: duplicate.lan\nAddress: 192.168.42.20\nAddress: 192.168.42.29\n' ;;
+			*) echo 'NXDOMAIN'; exit 1 ;;
+		esac ;;
 	'avahi-browse:-rptk _airplay._tcp') exit 124 ;;
 	'avahi-browse:-rptk _googlecast._tcp') exit 0 ;;
 	'curl:-q -4 -I -s --noproxy * --interface if!br-lan --proto =http,https --connect-timeout 2 --max-time 3 -o /dev/null -w %{http_code} '*)
@@ -56,7 +72,7 @@ case "${0##*/}:$*" in
 esac
 STUB
 chmod +x "$scratch/bin/stub"
-for cmd in ip ping ubus uci ucode avahi-browse curl; do ln -s stub "$scratch/bin/$cmd"; done
+for cmd in ip ping ubus uci ucode avahi-browse curl nslookup; do ln -s stub "$scratch/bin/$cmd"; done
 : > "$scratch/probes"
 
 run() { answer=$(sh "$scratch/doctor" lan-access "$@"); }
@@ -84,6 +100,36 @@ expect '@.web.endpoints[2].scheme' https
 expect '@.web.endpoints[2].state' certificate
 expect '@.web.endpoints[3].state' ''
 [ "$(grep -c '^web ' "$scratch/probes")" -eq 6 ]
+expect '@.name.advertised' nas.local
+expect '@.name.method' dns
+expect '@.name.state' matched
+expect '@.name.query' nas.lan
+expect '@.smb.dialect' 3.1.1
+expect '@.smb.signing' required
+
+run '' 192.168.42.20 smb true 'NAS.local.'
+expect '@.name.method' mdns
+expect '@.name.state' matched
+run '' 192.168.42.20 smb true 'wrong'
+expect '@.name.state' different
+expect '@.name.addresses[0]' 192.168.42.29
+run '' 192.168.42.20 smb true 'duplicate'
+expect '@.name.state' multiple
+run '' 192.168.42.20 smb true 'missing.lan'
+expect '@.name.state' not_seen
+run '' 192.168.42.20 smb true 'example.com'
+expect '@.name.state' unsupported
+if grep -q '^dns example.com' "$scratch/probes"; then exit 1; fi
+
+printf rejected > "$scratch/smb"
+run '' 192.168.42.20 smb true
+expect '@.service.tcp' open
+expect '@.smb.state' rejected
+printf refused > "$scratch/tcp"
+run '' 192.168.42.20 smb true
+expect '@.service.tcp' refused
+expect '@.smb.state' untested
+rm -f "$scratch/tcp"
 
 touch "$scratch/no-web"
 run 192.168.42.10 192.168.42.20 smb true

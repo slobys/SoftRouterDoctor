@@ -9,7 +9,7 @@
 const networkMap = rpc.declare({ object: 'soft-router-doctor', method: 'networkMap', params: ['peer'], reject: true });
 const measureQuality = rpc.declare({ object: 'soft-router-doctor', method: 'quality', reject: true });
 const diagnoseWebsite = rpc.declare({ object: 'soft-router-doctor', method: 'diagnoseSite', params: ['host'], reject: true });
-const diagnoseLan = rpc.declare({ object: 'soft-router-doctor', method: 'lanAccess', params: ['peer', 'target', 'profile', 'clientCheck'], reject: true });
+const diagnoseLan = rpc.declare({ object: 'soft-router-doctor', method: 'lanAccess', params: ['peer', 'target', 'profile', 'clientCheck', 'name'], reject: true });
 const monitorStatus = rpc.declare({ object: 'soft-router-doctor', method: 'monitorStatus', reject: true });
 const monitorSet = rpc.declare({ object: 'soft-router-doctor', method: 'monitorSet', params: ['enabled'], reject: true });
 const savedTopology = rpc.declare({ object: 'soft-router-doctor', method: 'savedTopology', reject: true });
@@ -1236,7 +1236,7 @@ async function checkTerminalWeb(address, report) {
 }
 
 function renderTerminalAccess(data, checks) {
-	const { service, target, web } = data;
+	const { web } = data;
 	const answered = checks.some(check => check.client === 'response');
 	const comparable = checks.some(check => check.state === 'response');
 	const permission = checks.some(check => check.client === 'permission');
@@ -1254,13 +1254,11 @@ function renderTerminalAccess(data, checks) {
 		timeout: ['skipped', '本机等待超时，原因待确认'], unclear: ['skipped', '本机未确认'],
 		permission: ['skipped', '本地网络权限显示为阻止']
 	};
-	const smb = service.tcp === 'open' ? '软路由 TCP 445 可连接' :
-		service.tcp === 'unavailable' ? '软路由未能执行 TCP 445 测试' : '软路由未连上 TCP 445';
 	return E('section', { class: 'srd-terminal', 'aria-labelledby': 'srd-terminal-title' }, [
-		E('h4', { class: 'srd-rank-title', id: 'srd-terminal-title' }, '当前手机或电脑 → NAS'),
+		E('h4', { class: 'srd-rank-title', id: 'srd-terminal-title' }, 'NAS 网页连通性对照'),
 		E('div', { class: 'srd-website-result' }, [text('strong', title), text('p', explanation, 'srd-map-meta')]),
-		E('dl', { class: 'srd-website-steps srd-lan-details' }, [
-			...checks.map(check => E('div', {}, [
+		checks.length ? E('dl', { class: 'srd-website-steps srd-lan-details' },
+			checks.map(check => E('div', {}, [
 				text('dt', check.scheme.toUpperCase() + ' ' + check.port),
 				E('dd', { class: 'srd-terminal-line' }, [
 					text('span', check.state === 'response' ? '软路由 HTTP ' + check.status : '软路由证书校验未通过'),
@@ -1268,16 +1266,89 @@ function renderTerminalAccess(data, checks) {
 					check.status >= 300 && check.status < 400 && check.client !== 'response' ?
 						text('span', '该入口返回跳转。本机仅检查已确认的 NAS 网页端口。', 'srd-map-meta') : ''
 				])
-			])),
-			E('div', {}, [text('dt', 'SMB 文件共享'), E('dd', { class: 'srd-terminal-line' }, [
-				text('span', smb), chip('skipped', '本机 SMB 待核对')
-			])])
-		]),
+			]))) : ''
+	]);
+}
+
+function smbNameEvidence(name) {
+	const source = name.method === 'mdns' ? '同网段 mDNS' : '软路由 DNS';
+	const answer = name.addresses?.length ? name.query + ' → ' + name.addresses.join('、') : '';
+	const outcomes = {
+		matched: [source + ' 指向目标', answer],
+		different: [source + ' 指向其他设备地址', answer],
+		multiple: [source + ' 返回多个地址', answer],
+		not_seen: [name.method === 'mdns' ? '本轮未见该名称的 SMB 通告' : '软路由 DNS 未查到 IPv4 记录', name.query],
+		unsupported: ['无法自动核对这个名称', '可填写简单设备名、软路由本地域名或带 .local 的名称。']
+	};
+	return outcomes[name.state] || ['未能核对名称', name.query];
+}
+
+function smbTerminalFinding(ip, byName) {
+	if (ip === 'opened' && byName === 'failed')
+		return ['按名称访问有问题', '同一共享用 IP 可以打开。请核对设备名、终端的名称解析或 SMB 名称别名设置。'];
+	if ((!ip || ip === 'opened') && byName === 'list_missing')
+		return ['网络列表的发现有问题', '该共享可以手动打开。请核对终端的网络发现、Wi-Fi 隔离和跨网段发现。'];
+	const outcomes = {
+		opened: ['用 IP 可以打开共享', '本次在文件管理器里打开了这个共享。可以再用名称试一次。'],
+		prompt: ['需要核对登录', '在文件管理器完成登录后，选择实际出现的结果。'],
+		auth: ['优先核对账号登录', '文件管理器提示凭据无效。请核对 NAS 账号、账号格式和终端保存的旧凭据。'],
+		denied: ['优先核对共享权限', '已经登录，但这个共享被拒绝访问。请核对 NAS 上账号与用户组的共享权限和目录权限。'],
+		missing: ['优先核对共享名', '已连接到 NAS，但没有看到预期共享。请核对共享名称、共享是否启用和账号的可见权限。'],
+		connect: ['终端的 445 或 SMB 协商待核对', '使用 IP 仍提示连接失败或超时。还需核对终端到 NAS 的网络规则、TCP 445，以及客户端的 SMB 版本和策略。']
+	};
+	return outcomes[ip] || ['等待终端复核', '浏览器无法读取文件管理器的连接和登录结果。'];
+}
+
+function renderSmbAccess(data) {
+	const { service, target } = data;
+	const protocol = data.smb || {};
+	const name = data.name || {};
+	const [nameTitle, nameDetail] = smbNameEvidence(name);
+	const ports = { open: '软路由 TCP 445 可连接', refused: '软路由 TCP 445 被拒绝',
+		timeout: '软路由 TCP 445 连接超时', failed: '软路由 TCP 445 未连上', unavailable: '软路由 TCP 445 未验证' };
+	const negotiation = {
+		confirmed: '协商结果为 SMB ' + protocol.dialect + (protocol.signing === 'required' ? ' · 服务器要求签名' : ''),
+		rejected: '服务端回应但拒绝了 SMB 协商',
+		unconfirmed: '端口可连接，暂未确认 SMB 版本',
+		unavailable: '此固件未能运行 SMB 协商检查'
+	}[protocol.state];
+	const ip = E('select', { id: 'srd-smb-ip-result', change: updateFinding }, Object.entries({
+		'': '还没试或结果不清楚', opened: '已经打开同一个共享', prompt: '只看到账号输入框',
+		auth: '明确提示账号或密码错误', denied: '登录后，共享提示拒绝访问',
+		missing: '已连接，找不到预期共享', connect: '连接失败或超时'
+	}).map(([value, label]) => E('option', { value }, label)));
+	const nameResult = E('select', { id: 'srd-smb-name-result', change: updateFinding }, Object.entries({
+		'': '还没试或结果不清楚', failed: '手动输入名称也打不开',
+		list_missing: '手输名称能打开，网络列表里找不到'
+	}).map(([value, label]) => E('option', { value }, label)));
+	const finding = E('div', { class: 'srd-website-result', 'aria-live': 'polite' });
+	function updateFinding() {
+		const [title, detail] = smbTerminalFinding(ip.value, nameResult.value);
+		dom.content(finding, [text('strong', title), text('p', detail, 'srd-map-meta')]);
+	}
+	updateFinding();
+
+	const rows = [
+		['名称与发现', nameTitle, [nameDetail, name.advertised && '目标网段通告 ' + name.advertised].filter(Boolean).join(' · '), '本机名称待核对'],
+		['SMB 端口', ports[service.tcp], negotiation, '本机 TCP 445 待核对'],
+		['账号与权限', '请在文件管理器核对登录和指定共享的访问结果', '', '待核对']
+	];
+	return E('section', { class: 'srd-terminal', 'aria-labelledby': 'srd-smb-title' }, [
+		E('h4', { class: 'srd-rank-title', id: 'srd-smb-title' }, 'NAS 文件共享'),
+		E('dl', { class: 'srd-website-steps srd-lan-details' }, rows.map(([label, value, detail, pending]) =>
+			E('div', {}, [text('dt', label), E('dd', {}, [
+				E('div', { class: 'srd-terminal-line' }, [text('span', value), chip('skipped', pending)]),
+				detail ? text('span', detail, 'srd-map-meta') : ''
+			])]))),
 		E('details', {}, [
-			text('summary', '用 IP 核对文件共享'),
-			E('p', {}, ['Windows 文件资源管理器地址栏输入 ', text('code', '\\\\' + target.address),
-				'。手机的 SMB 客户端或 macOS「连接服务器」输入 ', text('code', 'smb://' + target.address), '。']),
-			text('p', 'IP 能连而名称打不开，先查名称解析或服务发现。出现登录提示，说明已连到共享服务。登录后无法打开共享，请核对账户和共享权限。')
+			text('summary', '用 IP 核对并判断故障'),
+			E('p', {}, ['在 Windows 文件资源管理器输入 ', text('code', '\\\\' + target.address),
+				'，在手机 SMB 客户端或 macOS 输入 ', text('code', 'smb://' + target.address), '。请尝试打开原来失败的共享。']),
+			E('div', { class: 'srd-lan-form' }, [
+				E('label', {}, ['用 IP 打开时', ip]),
+				E('label', {}, ['用名称或网络列表时', nameResult])
+			]),
+			finding
 		])
 	]);
 }
@@ -1308,7 +1379,7 @@ function renderLanAccess(data, terminal = []) {
 		['目标设备', endpoint(target)],
 		['设备响应', (target.icmp === 'reply' ? 'Ping 有应答' : 'Ping 无应答') + ' · ' + neighbor[target.neighbor]],
 		service.port && service.profile !== 'smb' && ['服务端口', 'TCP ' + service.port + ' ' + tcp[service.tcp]],
-		discovery[service.mdns] && ['自动发现', discovery[service.mdns]]
+		service.profile !== 'smb' && discovery[service.mdns] && ['自动发现', discovery[service.mdns]]
 	].filter(Boolean);
 	return [
 		E('div', { class: 'srd-website-result' }, [
@@ -1318,7 +1389,7 @@ function renderLanAccess(data, terminal = []) {
 		E('dl', { class: 'srd-website-steps srd-lan-details' }, rows.map(([label, value]) =>
 			E('div', {}, [text('dt', label), text('dd', value)]))),
 		text('p', '上方的 Ping、ARP 和服务发现由软路由测得。', 'srd-map-meta'),
-		...(service.profile === 'smb' ? [renderTerminalAccess(data, terminal)] : [])
+		...(service.profile === 'smb' ? [renderSmbAccess(data), renderTerminalAccess(data, terminal)] : [])
 	];
 }
 
@@ -1435,8 +1506,14 @@ return view.extend({
 		const lanInput = E('input', { type: 'text', inputmode: 'decimal', maxlength: 15,
 			autocomplete: 'off', spellcheck: 'false', placeholder: '例如 192.168.1.50' });
 		const lanManual = E('label', {}, ['设备 IPv4 地址', lanInput]);
-		const lanProfile = E('select', { change: () => dom.content(lanContent, []) },
+		const lanProfile = E('select', { change: () => {
+			lanNameField.hidden = lanProfile.value !== 'smb';
+			dom.content(lanContent, []);
+		} },
 			Object.entries(lanProfiles).map(([id, label]) => E('option', { value: id }, label)));
+		const lanName = E('input', { type: 'text', maxlength: 253, autocomplete: 'off', spellcheck: 'false',
+			placeholder: '例如 NAS 或 nas.local' });
+		const lanNameField = E('label', { hidden: true }, ['平时使用的设备名（选填）', lanName]);
 		const lanSubmit = E('button', { type: 'submit', class: 'srd-primary' }, '检查设备');
 		const lanInventory = E('p', { class: 'srd-map-meta', role: 'status' });
 		const lanContent = E('div', { 'aria-live': 'polite' });
@@ -1449,7 +1526,7 @@ return view.extend({
 			text('p', '手机找不到电视、打印机或 NAS 时，可以检查目标设备的网段、响应和服务发现。', 'srd-accel-copy'),
 			text('p', '排查 NAS 时，在连不上的手机或电脑上打开此页，并选择「NAS / SMB 文件共享」。', 'srd-map-meta'),
 			E('form', { class: 'srd-lan-form', submit: event => { event.preventDefault(); runLan(); } }, [
-				E('label', {}, ['目标设备', lanDevices]), lanManual, E('label', {}, ['要检查的服务', lanProfile]), lanSubmit
+				E('label', {}, ['目标设备', lanDevices]), lanManual, E('label', {}, ['要检查的服务', lanProfile]), lanNameField, lanSubmit
 			]),
 			lanInventory,
 			lanContent
@@ -1513,7 +1590,7 @@ return view.extend({
 			try {
 				const peer = await readBrowserPeer().catch(() => '');
 				const profile = lanProfile.value;
-				const data = await diagnoseLan(peer, target, profile, profile === 'smb');
+				const data = await diagnoseLan(peer, target, profile, profile === 'smb', profile === 'smb' ? lanName.value.trim() : '');
 				if (data?.target?.address !== target || !data.service) {
 					dom.content(lanContent, text('p', data?.detail || '本轮未取得检查结果。', 'srd-accel-copy'));
 					return;
@@ -1773,7 +1850,7 @@ return view.extend({
 				qualityButton.disabled = qualityAgain.disabled = websiteButton.disabled = websiteSubmit.disabled =
 					lanButton.disabled = lanSubmit.disabled =
 					busy || accelerating || mapping || measuringQuality || checkingWebsite || checkingLan;
-			lanDevices.disabled = lanInput.disabled = lanProfile.disabled = checkingLan;
+			lanDevices.disabled = lanInput.disabled = lanProfile.disabled = lanName.disabled = checkingLan;
 			websiteInput.disabled = checkingWebsite;
 			discoverButton.disabled = busy || accelerating || mapping;
 			exportButton.disabled = busy || accelerating || mapping || !report;

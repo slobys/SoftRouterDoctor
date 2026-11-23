@@ -25,6 +25,7 @@ payload/monitor.sh|/usr/lib/soft-router-doctor-monitor.sh|644
 payload/quality.sh|/usr/lib/soft-router-doctor-quality.sh|644
 payload/site.sh|/usr/lib/soft-router-doctor-site.sh|644
 payload/lan-access.sh|/usr/lib/soft-router-doctor-lan-access.sh|644
+payload/smb-probe.uc|/usr/lib/soft-router-doctor-smb-probe.uc|644
 payload/monitor.init|/etc/init.d/soft-router-doctor-monitor|755
 payload/rpc|/usr/libexec/rpcd/soft-router-doctor|755
 payload/acl.json|/usr/share/rpcd/acl.d/luci-app-soft-router-doctor.json|644

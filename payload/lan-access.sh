@@ -2,6 +2,7 @@
 # Scope active probes to one RFC1918 address directly attached to a known LAN.
 
 LAN_ACCESS_LOCK=/tmp/soft-router-doctor-lan-access.lock
+LAN_SMB_PROBE=/usr/lib/soft-router-doctor-smb-probe.uc
 LAN_WEB_PORTS='http:80 http:5000 http:8080 https:443 https:5001 https:8443'
 
 lan_access_scope() {
@@ -99,6 +100,118 @@ lan_access_mdns() {
 	fi
 }
 
+lan_smb_name_valid() {
+	printf '%s\n' "$1" | LC_ALL=C awk -F . '
+		NR==1 && length($0)<=253 && NF {
+			for (i=1; i<=NF; i++)
+				if (length($i)>63 || $i !~ /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/) exit 1
+			ok=1
+		}
+		END {exit !(ok && NR==1)}'
+}
+
+lan_smb_local_query() {
+	local name="$1" domain
+	domain=$(uci -q get 'dhcp.@dnsmasq[0].domain' 2>/dev/null | tr 'A-Z' 'a-z')
+	lan_smb_name_valid "$domain" &&
+		[ "$(uci -q get 'dhcp.@dnsmasq[0].local' 2>/dev/null)" = "/$domain/" ] || return 1
+	case "$name" in
+		*."$domain") printf '%s\n' "$name" ;;
+		*.*) return 1 ;;
+		*) printf '%s.%s\n' "$name" "$domain" ;;
+	esac
+}
+
+lan_smb_names() {
+	local address="$1" device="$2" query="$3" mdns="$4" advertised='' lease='' state=unknown method='' code=0 ip
+	local avahi="$root/avahi" leases=$LEASE_FILE
+	[ -r "$avahi" ] || avahi=/dev/null
+	[ -r "$leases" ] || leases=/dev/null
+	advertised=$(LC_ALL=C awk -F ';' -v dev="$device" -v ip="$address" '
+		$1=="=" && $2==dev && $3=="IPv4" && $5=="_smb._tcp" && $8==ip {
+			name=tolower($7); sub(/\.$/, "", name); if (name ~ /\.local$/) print name
+		}' "$avahi" | sort -u | head -n 1)
+	lan_smb_name_valid "$advertised" || advertised=''
+	lease=$(LC_ALL=C awk -v now="$(date +%s)" -v ip="$address" '
+		$3==ip && ($1==0 || $1>now) { print tolower($4) }' "$leases" | sort -u)
+	lan_smb_name_valid "$lease" || lease=''
+	query=$(printf '%s' "${query%.}" | LC_ALL=C tr 'A-Z' 'a-z')
+
+	if [ -z "$query" ]; then
+		query=$advertised
+		if [ -n "$lease" ]; then query=$(lan_smb_local_query "$lease") || query=$advertised; fi
+	fi
+	: > "$root/name-addresses"
+	if [ -n "$query" ]; then
+		if ! lan_smb_name_valid "$query"; then
+			state=unsupported
+		elif [ "$query" != "${query%.local}" ]; then
+			method=mdns
+			case "$mdns" in not_seen|observed) state=not_seen ;; esac
+			LC_ALL=C awk -F ';' -v dev="$device" -v query="$query" '
+				$1=="=" && $2==dev && $3=="IPv4" && $5=="_smb._tcp" {
+					name=tolower($7); sub(/\.$/, "", name)
+					if (name==query) print $8
+				}' "$avahi" > "$root/name-addresses"
+		elif query=$(lan_smb_local_query "$query"); then
+			method=dns
+			LC_ALL=C timeout 3 nslookup -type=A "$query." 127.0.0.1 > "$root/smb-dns" 2>&1 || code=$?
+			if [ "$code" = 0 ] || LC_ALL=C grep -qE '(NXDOMAIN|No answer)' "$root/smb-dns"; then
+				state=not_seen
+			fi
+			LC_ALL=C awk '
+				/^Name:[[:space:]]/ {answer=1}
+				answer && /^Address:[[:space:]]/ {print $2}
+			' "$root/smb-dns" > "$root/name-addresses"
+		else
+			state=unsupported
+		fi
+	fi
+	LC_ALL=C awk -F . '
+		NF==4 {
+			for (i=1; i<=4; i++) if ($i !~ /^(0|[1-9][0-9]{0,2})$/ || $i>255) next
+			print
+		}' "$root/name-addresses" | sort -u > "$root/name-ipv4"
+	if [ -s "$root/name-ipv4" ]; then
+		if ! grep -Fqx -- "$address" "$root/name-ipv4"; then state=different
+		elif [ "$(wc -l < "$root/name-ipv4")" -gt 1 ]; then state=multiple
+		else state=matched
+		fi
+	fi
+
+	json_add_object name
+	json_add_string state "$state"
+	json_add_string method "$method"
+	if [ "$state" != unsupported ]; then json_add_string query "$query"; fi
+	json_add_string advertised "$advertised"
+	json_add_array addresses
+	head -n 6 "$root/name-ipv4" > "$root/name-visible"
+	while IFS= read -r ip; do json_add_string '' "$ip"; done < "$root/name-visible"
+	json_close_array
+	json_close_object
+}
+
+lan_smb_protocol() {
+	local state=untested version='' signing='' result probe="$1"
+	if [ "$probe" = open ]; then
+		state=unavailable
+		if [ -r "$LAN_SMB_PROBE" ]; then
+			result=$(timeout 3 ucode "$LAN_SMB_PROBE" "$2" "$3" 2>/dev/null) || result=unconfirmed
+			read -r state version signing <<EOF
+$result
+EOF
+			case "$state" in confirmed|rejected|unconfirmed|unavailable) ;; *) state=unconfirmed ;; esac
+		fi
+	fi
+	json_add_object smb
+	json_add_string state "$state"
+	if [ "$state" = confirmed ]; then
+		json_add_string dialect "$version"
+		json_add_string signing "$signing"
+	fi
+	json_close_object
+}
+
 lan_web_probe() {
 	local address="$1" device="$2" endpoint="$3" scheme port code=0 status
 	scheme=${endpoint%:*}
@@ -149,8 +262,8 @@ lan_web_report() {
 }
 
 lan_access() (
-	local origin="$1" target="$2" profile="$3" port='' types='' root='' service neighbor icmp
-	local client_check="$4" web_job=''
+	local origin="$1" target="$2" profile="$3" port='' types='' root='' service neighbor icmp type
+	local client_check="$4" smb_name="$5" web_job=''
 	local target_device target_scope target_network target_subnet target_zone
 	local source_device='' source_ip='' source_network='' source_subnet='' source_zone=''
 	local relation=unknown policy=unknown firewall_config mdns=untested
@@ -247,12 +360,14 @@ EOF
 	json_add_string tcp "$service"
 	json_add_string mdns "$mdns"
 	json_add_array announcements
-	while IFS= read -r service; do json_add_string '' "$service"; done < "$root/announcements"
+	while IFS= read -r type; do json_add_string '' "$type"; done < "$root/announcements"
 	json_close_array
 	json_close_object
 	if [ -n "$web_job" ]; then
 		wait "$web_job"
 		lan_web_report
+		lan_smb_names "$target" "$target_device" "$smb_name" "$mdns"
+		lan_smb_protocol "$service" "$target" "$target_device"
 	fi
 	json_dump
 )

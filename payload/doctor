@@ -24,7 +24,7 @@ field() {
 }
 
 identity() {
-	json_add_string version '0.13.0-dev'
+	json_add_string version '0.14.0-dev'
 	IFS= read -r revision 2>/dev/null < "$REVISION_FILE" || revision=uninstalled
 	json_add_string revision "$revision"
 }
@@ -1454,7 +1454,7 @@ case "$1" in
 			{ repair_result unavailable '设备互访组件不可用。'; exit; }
 		. "$SAVED_TOPOLOGY_LIB"
 		. "$LAN_ACCESS_LIB"
-		lan_access "$2" "$3" "$4" "$5"
+		lan_access "$2" "$3" "$4" "$5" "$6"
 		exit ;;
 	site)
 		[ -r "$SITE_LIB" ] || { repair_result unavailable '网站诊断组件不可用。'; exit 1; }
