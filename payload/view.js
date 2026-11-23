@@ -533,6 +533,67 @@ async function readBrowserPeer() {
 	return typeof address === 'string' && /^[0-9a-f:.]{1,45}$/i.test(address) ? address : '';
 }
 
+async function requestLanDns(action, nonce, name = '') {
+	const response = await fetch(L.url('admin/status/soft-router-doctor/lan-dns'), {
+		method: 'POST', credentials: 'same-origin', cache: 'no-store', signal: AbortSignal.timeout?.(5000),
+		body: new URLSearchParams({ token: L.env.token, action, nonce, name })
+	});
+	if (!response.ok && response.status !== 400) throw new Error('LAN DNS request failed');
+	return response.json();
+}
+
+const lanDnsStates = {
+	answered: '取得记录', nxdomain: '名称不存在', no_records: '没有此类记录',
+	error: '解析器返回错误', timeout: '查询超时', query_only: '只观察到查询',
+	unavailable: '未取得结果'
+};
+
+function renderLanDns(data) {
+	const { router, observed } = data;
+	const names = observed.packets.filter(row => row.sample === 'name');
+	const distinct = names.find(row => row.type === 'A' && ['nxdomain', 'no_records'].includes(row.status));
+	const replyInterfaces = [...new Set(names.map(row => row.reply_via).filter(Boolean))];
+	const terminalResolved = names.some(row => row.type === 'A' && row.status === 'answered');
+	const title = distinct && router.loopback_name.state === 'answered' ?
+		terminalResolved ? '当前终端收到了不同的名称答复' : '本地记录存在，终端收到不同答复' :
+		router.loopback_name.state === 'answered' ? '软路由本机能解析该名称' :
+			'软路由本机未取得该名称的 IPv4 记录';
+	const scope = data.lan_address ? data.lan_address + '（软路由发起）' : '未识别软路由 LAN 地址';
+	const rows = [
+		['本地记录', '127.0.0.1', router.loopback_name],
+		['本地记录', scope, router.lan_name],
+		['公开域名对照', '127.0.0.1', router.loopback_public],
+		['公开域名对照', scope, router.lan_public]
+	];
+	const partial = observed.packets.some(row => row.sample === 'canary') ?
+		'看到了本轮探测标记，但没有观察到目标名称。终端可能已有缓存。' :
+		observed.listening ?
+			'没有观察到这台终端向 53 端口查询本轮名称。缓存、加密 DNS、浏览器未发起预解析或请求绕开软路由时，都可能出现这种结果。' :
+			'当前连接或固件无法观察终端查询。终端的实际 DNS 路径待核对。';
+	return [
+		E('div', { class: 'srd-website-result' }, [
+			text('strong', title), text('p', data.name, 'srd-map-meta')
+		]),
+		E('dl', { class: 'srd-website-steps srd-lan-details' }, rows.map(([label, server, result]) =>
+			E('div', {}, [text('dt', label), E('dd', {}, [
+				text('span', server + ' · ' + lanDnsStates[result.state]),
+				result.addresses.length ? text('span', result.addresses.join('、'), 'srd-map-meta') : ''
+			])]))),
+		text('p', data.public_control + ' 用于对照公开域名解析。返回记录也可能来自缓存。', 'srd-map-meta'),
+		E('section', { class: 'srd-terminal', 'aria-labelledby': 'srd-dns-terminal-title' }, [
+			E('h4', { class: 'srd-rank-title', id: 'srd-dns-terminal-title' }, '当前终端的查询路径'),
+			data.terminal ? text('p', [data.terminal, data.interface].filter(Boolean).join(' · '), 'srd-map-meta') : '',
+			names.length ? E('dl', { class: 'srd-website-steps srd-lan-details' }, names.map(row =>
+				E('div', {}, [
+					text('dt', row.type + ' · ' + row.protocol.toUpperCase() + ' 53'),
+					text('dd', [row.server, lanDnsStates[row.status], row.reply_via && '回包经过 ' + row.reply_via].filter(Boolean).join(' · '))
+				]))) : text('p', partial),
+			replyInterfaces.includes('dae0') ?
+				text('p', '观察到回包经过 dae0，提示 DAE 参与了这次终端解析。最终上游服务器仍待核对。', 'srd-map-meta') : ''
+		])
+	];
+}
+
 function observedDevices(map, discovery) {
 	const devices = [];
 	for (const item of discovery?.lldp || []) {
@@ -1299,7 +1360,7 @@ function smbTerminalFinding(ip, byName) {
 	return outcomes[ip] || ['等待终端复核', '浏览器无法读取文件管理器的连接和登录结果。'];
 }
 
-function renderSmbAccess(data) {
+function renderSmbAccess(data, openLanDns) {
 	const { service, target } = data;
 	const protocol = data.smb || {};
 	const name = data.name || {};
@@ -1340,6 +1401,7 @@ function renderSmbAccess(data) {
 				E('div', { class: 'srd-terminal-line' }, [text('span', value), chip('skipped', pending)]),
 				detail ? text('span', detail, 'srd-map-meta') : ''
 			])]))),
+		name.method === 'dns' && name.query ? button('检查局域网 DNS', () => openLanDns(name.query)) : '',
 		E('details', {}, [
 			text('summary', '用 IP 核对并判断故障'),
 			E('p', {}, ['在 Windows 文件资源管理器输入 ', text('code', '\\\\' + target.address),
@@ -1353,7 +1415,7 @@ function renderSmbAccess(data) {
 	]);
 }
 
-function renderLanAccess(data, terminal = []) {
+function renderLanAccess(data, terminal, openLanDns) {
 	const { source, target, service } = data;
 	const endpoint = item => [item.address, item.interface, item.zone && '防火墙区 ' + item.zone, item.subnet]
 		.filter(Boolean).join(' · ') || '未取得';
@@ -1389,7 +1451,7 @@ function renderLanAccess(data, terminal = []) {
 		E('dl', { class: 'srd-website-steps srd-lan-details' }, rows.map(([label, value]) =>
 			E('div', {}, [text('dt', label), text('dd', value)]))),
 		text('p', '上方的 Ping、ARP 和服务发现由软路由测得。', 'srd-map-meta'),
-		...(service.profile === 'smb' ? [renderSmbAccess(data), renderTerminalAccess(data, terminal)] : [])
+		...(service.profile === 'smb' ? [renderSmbAccess(data, openLanDns), renderTerminalAccess(data, terminal)] : [])
 	];
 }
 
@@ -1419,6 +1481,7 @@ return view.extend({
 		let measuringQuality = false;
 		let checkingWebsite = false;
 		let checkingLan = false;
+		let checkingLanDns = false;
 		let repairInFlight = false;
 		let progress = ['ready', 'ready'];
 		const live = E('div', { 'class': 'srd-sr', 'role': 'status', 'aria-live': 'polite' });
@@ -1443,6 +1506,9 @@ return view.extend({
 		const qualityButton = button('卡顿诊断', runQuality);
 		const websiteButton = button('网站诊断', openWebsite);
 		const lanButton = button('设备互访', openLan);
+		const lanDnsButton = button('局域网 DNS', () => openLanDns());
+		lanDnsButton.setAttribute('aria-controls', 'srd-lan-dns');
+		lanDnsButton.setAttribute('aria-expanded', 'false');
 		lanButton.setAttribute('aria-controls', 'srd-lan-access');
 		lanButton.setAttribute('aria-expanded', 'false');
 		websiteButton.setAttribute('aria-controls', 'srd-website');
@@ -1531,7 +1597,92 @@ return view.extend({
 			lanInventory,
 			lanContent
 		]);
+		const lanDnsInput = E('input', { id: 'srd-lan-dns-name', type: 'text', maxlength: 254,
+			autocomplete: 'off', spellcheck: 'false', placeholder: '例如 nas.lan' });
+		const lanDnsSubmit = E('button', { type: 'submit', class: 'srd-primary' }, '检查 DNS');
+		const lanDnsContent = E('div', { 'aria-live': 'polite' });
+		const lanDnsPanel = E('section', { class: 'srd-accel', id: 'srd-lan-dns', hidden: true,
+			'aria-labelledby': 'srd-lan-dns-title' }, [
+			E('div', { class: 'srd-quality-header' }, [
+				E('h3', { class: 'srd-section-title', id: 'srd-lan-dns-title' }, '局域网 DNS'),
+				button('收起', () => { hideLanDns(); lanDnsButton.focus(); })
+			]),
+			E('form', { class: 'srd-website-form', submit: event => { event.preventDefault(); runLanDns(); } }, [
+				E('label', { for: 'srd-lan-dns-name' }, '局域网设备名'),
+				E('div', { class: 'srd-website-input' }, [lanDnsInput, lanDnsSubmit]),
+				text('p', '对比本地记录、公开域名解析和这台终端的实际请求。', 'srd-map-meta')
+			]),
+			lanDnsContent
+		]);
 		let readingLanDevices = false;
+
+		function hideLanDns() {
+			lanDnsPanel.hidden = true;
+			lanDnsButton.setAttribute('aria-expanded', 'false');
+		}
+
+		function openLanDns(name) {
+			if (checkingLanDns || checkingLan || checkingWebsite || measuringQuality || busy || accelerating || mapping) return;
+			lanDnsPanel.hidden = false;
+			lanDnsButton.setAttribute('aria-expanded', 'true');
+			if (name) {
+				lanDnsInput.value = name;
+				dom.content(lanDnsContent, []);
+			}
+			hideLan();
+			hideWebsite();
+			hideQuality();
+			speedPanel.hidden = mapPanel.hidden = true;
+			speedButton.setAttribute('aria-expanded', 'false');
+			mapButton.setAttribute('aria-expanded', 'false');
+			lanDnsInput.focus();
+		}
+
+		async function runLanDns() {
+			if (checkingLanDns || checkingLan || checkingWebsite || measuringQuality || busy || accelerating || mapping) return;
+			const name = lanDnsInput.value.trim();
+			const valid = /^[a-z0-9][a-z0-9.-]{0,253}$/i.test(name);
+			lanDnsInput.setAttribute('aria-invalid', valid ? 'false' : 'true');
+			if (!valid) {
+				dom.content(lanDnsContent, text('p', '请输入局域网设备名，例如 nas.lan。', 'srd-accel-copy'));
+				lanDnsInput.focus();
+				return;
+			}
+			const nonce = Array.from(window.crypto.getRandomValues(new Uint8Array(8)), byte =>
+				byte.toString(16).padStart(2, '0')).join('');
+			const hints = [];
+			checkingLanDns = true;
+			update();
+			dom.content(lanDnsContent, text('p', '正在对照软路由的解析结果…', 'srd-accel-copy'));
+			try {
+				let result = await requestLanDns('start', nonce, name);
+				if (result.state === 'started') {
+					if (result.listening) {
+						for (const host of [result.name, result.canary]) {
+							if (!/^[a-z0-9][a-z0-9.-]{0,252}$/.test(host)) continue;
+							const link = E('link', { rel: 'dns-prefetch', href: '//' + host + '.' });
+							document.head.appendChild(link);
+							hints.push(link);
+						}
+						dom.content(lanDnsContent, text('p', '正在观察这台终端的 DNS 请求。也可以现在用原来的应用重试设备名。', 'srd-accel-copy'));
+					}
+					for (let attempt = 0; attempt < 11; attempt++) {
+						await new Promise(resolve => setTimeout(resolve, 850));
+						result = await requestLanDns('result', nonce);
+						if (result.state !== 'running') break;
+					}
+				}
+				dom.content(lanDnsContent, result.state === 'done' ? renderLanDns(result) :
+					text('p', result.state === 'running' ? '本轮诊断未在预期时间内完成，请重试。' :
+						result.detail || '本轮未取得诊断结果。', 'srd-accel-copy'));
+			} catch {
+				dom.content(lanDnsContent, text('p', '暂时无法完成局域网 DNS 检查，请核对 LuCI 登录状态及拓扑查看权限。', 'srd-accel-copy'));
+			} finally {
+				for (const link of hints) link.remove();
+				checkingLanDns = false;
+				update();
+			}
+		}
 
 		function hideLan() {
 			lanPanel.hidden = true;
@@ -1539,7 +1690,8 @@ return view.extend({
 		}
 
 		async function openLan() {
-			if (checkingLan || checkingWebsite || measuringQuality || busy || accelerating || mapping) return;
+			if (checkingLanDns || checkingLan || checkingWebsite || measuringQuality || busy || accelerating || mapping) return;
+			hideLanDns();
 			lanPanel.hidden = false;
 			lanButton.setAttribute('aria-expanded', 'true');
 			hideWebsite();
@@ -1574,7 +1726,7 @@ return view.extend({
 		}
 
 		async function runLan() {
-			if (checkingLan || checkingWebsite || measuringQuality || busy || accelerating || mapping) return;
+			if (checkingLanDns || checkingLan || checkingWebsite || measuringQuality || busy || accelerating || mapping) return;
 			const target = lanDevices.value || lanInput.value.trim();
 			const valid = privateIPv4(target);
 			lanInput.setAttribute('aria-invalid', valid ? 'false' : 'true');
@@ -1598,7 +1750,7 @@ return view.extend({
 				if (data.web?.endpoints?.length)
 					dom.content(lanContent, text('p', '软路由检查完成，正在从本机浏览器对照 NAS 网页响应…', 'srd-accel-copy'));
 				const terminal = await checkTerminalWeb(target, data.web);
-				dom.content(lanContent, renderLanAccess(data, terminal));
+				dom.content(lanContent, renderLanAccess(data, terminal, openLanDns));
 			} catch {
 				dom.content(lanContent, text('p', '暂时无法完成检查，请核对 LuCI 登录状态及拓扑查看权限。', 'srd-accel-copy'));
 			} finally {
@@ -1613,7 +1765,8 @@ return view.extend({
 		}
 
 		function openWebsite() {
-			if (checkingLan || checkingWebsite || measuringQuality || busy || accelerating || mapping) return;
+			if (checkingLanDns || checkingLan || checkingWebsite || measuringQuality || busy || accelerating || mapping) return;
+			hideLanDns();
 			hideLan();
 			websitePanel.hidden = false;
 			websiteButton.setAttribute('aria-expanded', 'true');
@@ -1625,7 +1778,7 @@ return view.extend({
 		}
 
 		async function runWebsite() {
-			if (checkingLan || checkingWebsite || measuringQuality || busy || accelerating || mapping) return;
+			if (checkingLanDns || checkingLan || checkingWebsite || measuringQuality || busy || accelerating || mapping) return;
 			const host = websiteHost(websiteInput.value);
 			websiteInput.setAttribute('aria-invalid', host ? 'false' : 'true');
 			if (!host) {
@@ -1654,7 +1807,8 @@ return view.extend({
 		}
 
 		async function runQuality() {
-			if (checkingLan || measuringQuality || checkingWebsite || busy || accelerating || mapping) return;
+			if (checkingLanDns || checkingLan || measuringQuality || checkingWebsite || busy || accelerating || mapping) return;
+			hideLanDns();
 			hideLan();
 			hideWebsite();
 			measuringQuality = true;
@@ -1715,7 +1869,8 @@ return view.extend({
 		}
 
 		async function runTopology() {
-			if (busy || accelerating || mapping || measuringQuality || checkingWebsite || checkingLan) return;
+			if (busy || accelerating || mapping || measuringQuality || checkingWebsite || checkingLan || checkingLanDns) return;
+			hideLanDns();
 			hideLan();
 			hideWebsite();
 			mapping = true;
@@ -1788,7 +1943,8 @@ return view.extend({
 		}
 
 		async function runAcceleration(plan, items = []) {
-			if (busy || accelerating || mapping || measuringQuality || checkingWebsite || checkingLan) return;
+			if (busy || accelerating || mapping || measuringQuality || checkingWebsite || checkingLan || checkingLanDns) return;
+			hideLanDns();
 			hideLan();
 			hideWebsite();
 			hideQuality();
@@ -1848,9 +2004,10 @@ return view.extend({
 			primary.textContent = busy ? (repairInFlight ? '正在修复' : '体检中') : report ? '重新体检' : '开始体检';
 			primary.disabled = local.disabled = speedButton.disabled = mapButton.disabled =
 				qualityButton.disabled = qualityAgain.disabled = websiteButton.disabled = websiteSubmit.disabled =
-					lanButton.disabled = lanSubmit.disabled =
-					busy || accelerating || mapping || measuringQuality || checkingWebsite || checkingLan;
+					lanButton.disabled = lanSubmit.disabled = lanDnsButton.disabled = lanDnsSubmit.disabled =
+					busy || accelerating || mapping || measuringQuality || checkingWebsite || checkingLan || checkingLanDns;
 			lanDevices.disabled = lanInput.disabled = lanProfile.disabled = lanName.disabled = checkingLan;
+			lanDnsInput.disabled = checkingLanDns;
 			websiteInput.disabled = checkingWebsite;
 			discoverButton.disabled = busy || accelerating || mapping;
 			exportButton.disabled = busy || accelerating || mapping || !report;
@@ -1883,7 +2040,7 @@ return view.extend({
 			}
 
 			if (report) {
-				const fix = !busy && !accelerating && !mapping && !checkingLan && report.can_start_dnsmasq && L.hasViewPermission() ? showConfirmation : null;
+				const fix = !busy && !accelerating && !mapping && !checkingLan && !checkingLanDns && report.can_start_dnsmasq && L.hasViewPermission() ? showConfirmation : null;
 				dom.content(results, renderReport(report, fix));
 			}
 		}
@@ -1896,7 +2053,8 @@ return view.extend({
 		}
 
 		async function runScan(localOnly, keepNotice) {
-			if (busy || accelerating || mapping || measuringQuality || checkingWebsite || checkingLan) return;
+			if (busy || accelerating || mapping || measuringQuality || checkingWebsite || checkingLan || checkingLanDns) return;
+			hideLanDns();
 			hideLan();
 			hideWebsite();
 			hideQuality();
@@ -1936,7 +2094,7 @@ return view.extend({
 		}
 
 		function showConfirmation() {
-			if (busy || accelerating || mapping || measuringQuality || checkingLan) return;
+			if (busy || accelerating || mapping || measuringQuality || checkingLan || checkingLanDns) return;
 			ui.showModal('启动 dnsmasq 并复测', [
 				text('p', '启动会使用路由器现有的 DNS 和 DHCP 配置。继续前，请确认这台设备负责对应服务。'),
 				E('div', { 'class': 'right' }, [
@@ -1949,7 +2107,7 @@ return view.extend({
 
 		async function runRepair() {
 			ui.hideModal();
-			if (busy || accelerating || mapping || measuringQuality || checkingLan) return;
+			if (busy || accelerating || mapping || measuringQuality || checkingLan || checkingLanDns) return;
 			const localOnly = report.mode === 'local';
 			busy = repairInFlight = true;
 			summary.textContent = '正在启动 DNS 服务并验证实际解析。';
@@ -1979,12 +2137,12 @@ return view.extend({
 					E('div', { 'class': 'srd-hero-intro' }, [
 						E('h2', { 'class': 'srd-title', 'id': 'srd-page-title' }, '软路由体检'), summary
 					]),
-					E('div', { 'class': 'srd-actions' }, [ primary, local, mapButton, lanButton, qualityButton, websiteButton, speedButton, exportButton ]),
+					E('div', { 'class': 'srd-actions' }, [ primary, local, mapButton, lanButton, lanDnsButton, qualityButton, websiteButton, speedButton, exportButton ]),
 					meta
 				]),
 				dial
 			]),
-			steps, live, notice, lanPanel, websitePanel, qualityPanel, recorder.card, mapPanel, speedPanel, results
+			steps, live, notice, lanPanel, lanDnsPanel, websitePanel, qualityPanel, recorder.card, mapPanel, speedPanel, results
 		]);
 	}
 });

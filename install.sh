@@ -25,6 +25,8 @@ payload/monitor.sh|/usr/lib/soft-router-doctor-monitor.sh|644
 payload/quality.sh|/usr/lib/soft-router-doctor-quality.sh|644
 payload/site.sh|/usr/lib/soft-router-doctor-site.sh|644
 payload/lan-access.sh|/usr/lib/soft-router-doctor-lan-access.sh|644
+payload/lan-dns.sh|/usr/lib/soft-router-doctor-lan-dns.sh|644
+payload/dns-trace.awk|/usr/lib/soft-router-doctor-dns-trace.awk|644
 payload/smb-probe.uc|/usr/lib/soft-router-doctor-smb-probe.uc|644
 payload/monitor.init|/etc/init.d/soft-router-doctor-monitor|755
 payload/rpc|/usr/libexec/rpcd/soft-router-doctor|755
@@ -32,6 +34,7 @@ payload/acl.json|/usr/share/rpcd/acl.d/luci-app-soft-router-doctor.json|644
 payload/menu.json|/usr/share/luci/menu.d/luci-app-soft-router-doctor.json|644
 payload/view.js|/www/luci-static/resources/view/status/soft-router-doctor.js|644
 payload/peer.ut|/usr/share/ucode/luci/template/soft-router-doctor-peer.ut|644
+payload/dns.ut|/usr/share/ucode/luci/template/soft-router-doctor-dns.ut|644
 install.sh|/usr/share/soft-router-doctor/manage.sh|755
 FILES
 }
@@ -199,7 +202,7 @@ prepare_payload() {
 		local_hash=$(sha "$stage/SHA256SUMS") || fail '无法计算本地清单指纹。'
 		revision=local-$local_hash
 	fi
-	for program in payload/doctor payload/topology.sh payload/monitor.sh payload/monitor.init payload/quality.sh payload/site.sh payload/lan-access.sh payload/rpc install.sh; do
+	for program in payload/doctor payload/topology.sh payload/monitor.sh payload/monitor.init payload/quality.sh payload/site.sh payload/lan-access.sh payload/lan-dns.sh payload/rpc install.sh; do
 		sh -n "$stage/payload/$program" || fail "Shell 语法错误：$program"
 	done
 }

@@ -18,5 +18,15 @@
     "depends": {
       "acl": ["luci-app-soft-router-doctor-topology"]
     }
+  },
+  "admin/status/soft-router-doctor/lan-dns": {
+    "action": {
+      "type": "template",
+      "path": "soft-router-doctor-dns",
+      "post": true
+    },
+    "depends": {
+      "acl": ["luci-app-soft-router-doctor-topology"]
+    }
   }
 }

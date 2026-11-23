@@ -10,6 +10,7 @@ MONITOR_LIB=/usr/lib/soft-router-doctor-monitor.sh
 QUALITY_LIB=/usr/lib/soft-router-doctor-quality.sh
 SITE_LIB=/usr/lib/soft-router-doctor-site.sh
 LAN_ACCESS_LIB=/usr/lib/soft-router-doctor-lan-access.sh
+LAN_DNS_LIB=/usr/lib/soft-router-doctor-lan-dns.sh
 REPAIR_LOCK=/var/lock/soft-router-doctor-repair
 APK_CACHE=/var/cache/apk
 APK_CUSTOM_CACHE=/etc/apk/cache
@@ -24,7 +25,7 @@ field() {
 }
 
 identity() {
-	json_add_string version '0.14.0-dev'
+	json_add_string version '0.15.0-dev'
 	IFS= read -r revision 2>/dev/null < "$REVISION_FILE" || revision=uninstalled
 	json_add_string revision "$revision"
 }
@@ -1449,6 +1450,15 @@ if [ "$1" = accelerate ]; then
 fi
 
 case "$1" in
+	lan-dns)
+		[ -r "$SAVED_TOPOLOGY_LIB" ] && [ -r "$LAN_ACCESS_LIB" ] && [ -r "$LAN_DNS_LIB" ] ||
+			{ repair_result unavailable '局域网 DNS 组件不可用。'; exit; }
+		. "$SAVED_TOPOLOGY_LIB"
+		. "$LAN_ACCESS_LIB"
+		. "$LAN_DNS_LIB"
+		shift
+		lan_dns "$@"
+		exit ;;
 	lan-access)
 		[ -r "$SAVED_TOPOLOGY_LIB" ] && [ -r "$LAN_ACCESS_LIB" ] ||
 			{ repair_result unavailable '设备互访组件不可用。'; exit; }

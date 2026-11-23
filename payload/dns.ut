@@ -1,0 +1,20 @@
+{%
+	const action = http.formvalue('action') ?? '';
+	const nonce = http.formvalue('nonce') ?? '';
+	const peer = http.getenv('REMOTE_ADDR') ?? '';
+	const name = http.formvalue('name') ?? '';
+	http.header('Content-Type', 'application/json; charset=UTF-8');
+	http.header('Cache-Control', 'no-store');
+	if ((action !== 'start' && action !== 'result') || length(nonce) !== 16 || match(nonce, /[^0-9a-f]/) ||
+		length(peer) > 45 || match(peer, /[^0-9a-fA-F.:]/) ||
+		length(name) > 254 || match(name, /[^0-9a-zA-Z.-]/)) {
+		http.status(400, 'Bad Request');
+		http.write('{"state":"rejected","detail":"请输入有效的局域网设备名。"}');
+		return;
+	}
+	const fs = require('fs');
+	const cmd = fs.popen(sprintf("/usr/sbin/soft-router-doctor lan-dns '%s' '%s' '%s' '%s'", action, peer, nonce, name));
+	const result = cmd?.read('all');
+	cmd?.close();
+	http.write(result || '{"state":"unavailable","detail":"无法读取局域网 DNS 检查。"}');
+%}
