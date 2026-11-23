@@ -1,5 +1,12 @@
 # 预览版验证记录
 
+## v0.12 家庭设备互访
+
+2026-11-23，在 NanoPi R4S 的 iStoreOS 25.12.6 和 Argon 上安装并验证提交 `0e8c26fb0d0c343180c7f3c627ac8a1baa606661`。实际 LuCI 会识别来源连接和目标设备处在同一 LAN。真实 NAS 出现在设备列表，选中后返回 Ping 有应答、TCP 445 可连接及 SMB mDNS 通告。安装前后 network、firewall、dhcp 配置摘要一致。
+
+- 在桌面与 390 像素宽度完成诊断。页面拒绝公网地址，服务端拒绝软路由自身地址。撤销拓扑读取 RPC 权限后，诊断请求被拒绝。
+- 在 R4S 运行 `tests/lan-access.sh`，用隔离数据验证访客网跨区转发、仅 IPv6 的转发规则、网关后的目标、端口拒绝或超时，以及其他网段的 mDNS 通告被忽略。`tests/topology.sh`、`tests/saved-topology.sh`、`tests/site.sh` 继续通过。访客网、打印与投屏场景的实机验证仍待补齐。
+
 ## v0.11 指定网站诊断
 
 2026-11-23，在 NanoPi R4S 的 iStoreOS 25.12.6 和 Argon 上验证提交 `3b86e2fb08a9d756840d1416d3cca57ec93b575e`。在 R4S 上查询并访问 `example.com`，IPv4 和 IPv6 均返回 HTTP 200。`ipv4.icanhazip.com` 的 IPv4 可用，IPv6 显示未发布 AAAA。保留后缀 `.invalid` 返回 NXDOMAIN，过期证书测试站点的 IPv4 建立了 TCP 连接，TLS 证书校验失败。
