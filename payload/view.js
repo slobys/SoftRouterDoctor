@@ -7,6 +7,7 @@
 'require poll';
 
 const networkMap = rpc.declare({ object: 'soft-router-doctor', method: 'networkMap', params: ['peer'], reject: true });
+const measureQuality = rpc.declare({ object: 'soft-router-doctor', method: 'quality', reject: true });
 const monitorStatus = rpc.declare({ object: 'soft-router-doctor', method: 'monitorStatus', reject: true });
 const monitorSet = rpc.declare({ object: 'soft-router-doctor', method: 'monitorSet', params: ['enabled'], reject: true });
 const savedTopology = rpc.declare({ object: 'soft-router-doctor', method: 'savedTopology', reject: true });
@@ -125,6 +126,8 @@ const styles = [
 	'.srd-saved-form{margin:10px 0;padding:10px 12px;background:var(--quiet);border-radius:8px}.srd-saved-fields{display:flex;flex-wrap:wrap;gap:8px 12px;margin:7px 0 10px}.srd-saved-fields label{display:grid;gap:4px;flex:1 1 150px;min-width:0;font-size:.82rem;color:var(--ink)}.srd-root .srd-saved-fields input,.srd-root .srd-saved-fields select{width:100%;box-sizing:border-box;min-height:40px;min-width:0;color:var(--ink);background:var(--paper);border:1px solid var(--line);border-radius:7px;padding:5px 8px}',
 	'.srd-record-card{margin-top:14px;border:1px solid var(--line);border-radius:12px;background:var(--paper);padding:14px 16px}.srd-record-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px 12px;margin-bottom:5px}.srd-root .srd-record-head .srd-section-title{flex:1 1 12rem;width:auto;min-width:0;margin:0}.srd-record-summary{margin-top:6px;overflow-wrap:anywhere}.srd-record-summary strong{font-size:.96rem}.srd-record-summary .srd-map-meta{margin-top:3px}',
 	'.srd-root .srd-record-items{list-style:none;margin:7px 0 12px;padding:0}.srd-record-items li{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:2px 12px;padding:7px 0;border-top:1px solid var(--line)}.srd-record-items strong{font-size:.85rem}.srd-record-timeline .srd-button{margin-bottom:4px}',
+	'.srd-quality-header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px 12px;margin-bottom:10px}.srd-root .srd-quality-header .srd-section-title{flex:1 1 9rem;min-width:0;width:auto;margin:0}.srd-quality-actions{display:flex;gap:6px;flex-wrap:wrap}.srd-quality-summary{background:var(--quiet);border-radius:7px;padding:9px 11px}.srd-quality-summary strong{font-size:.96rem}.srd-quality-local{margin-top:10px;padding:7px 0}.srd-quality-local strong{font-size:.85rem}',
+	'.srd-root .srd-quality-paths{list-style:none;margin:10px 0;padding:0}.srd-quality-paths li{border-top:1px solid var(--line);padding:9px 0;overflow-wrap:anywhere}.srd-quality-path-head{display:flex;align-items:center;flex-wrap:wrap;gap:4px 9px}.srd-quality-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,108px),1fr));gap:5px 10px;margin:6px 0 0}.srd-quality-stats dt{color:var(--muted);font-size:.76rem}.srd-quality-stats dd{margin:0;font-size:.85rem;font-weight:660;font-variant-numeric:tabular-nums}',
 	'.srd-path-evidence{margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}.srd-path-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:6px 0}.srd-root .srd-path-fact{font-size:.92rem;margin-top:8px}.srd-path-devices{list-style:none;padding:0;margin:4px 0 0}.srd-path-devices li{padding:8px 0;border-top:1px solid var(--line);overflow-wrap:anywhere}.srd-root .srd-path-actions p{margin:0}.srd-mode-label{display:inline-block;margin-inline-start:10px;font-size:.8rem;color:var(--accent);font-weight:600}',
 	'.srd-root .srd-pc-path{display:flex;flex-wrap:wrap;gap:8px;list-style:none;margin:10px 0;padding:0}.srd-pc-path li{display:grid;align-content:start;gap:3px;flex:1 1 136px;min-width:0;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:var(--quiet);overflow-wrap:anywhere}.srd-pc-path li[data-state=unknown]{border-style:dashed;background:transparent}.srd-pc-path strong{font-size:.84rem;color:var(--ink)}.srd-pc-path li span{font-size:.77rem;color:var(--muted)}',
 	'.srd-map-clients{margin:0;padding:0;list-style:none}.srd-map-clients li{display:flex;align-items:baseline;justify-content:space-between;gap:6px;padding:6px 0;border-top:1px solid var(--line)}.srd-map-clients li>div{min-width:0}.srd-map-clients strong{font-size:.87rem}',
@@ -932,6 +935,112 @@ function incidentRecorder(canEdit) {
 	return { card, refresh };
 }
 
+const qualityLabels = {
+	similar: '接近本机轻载参考', reference_saved: '已保存本轮轻载参考',
+	no_reference: '等待轻载参考', elevated: '高于轻载参考',
+	elevated_upload: '上行流量伴随延迟升高', elevated_download: '下行流量伴随延迟升高',
+	elevated_both: '双向流量伴随延迟升高', loss: '样本出现丢包',
+	no_reply: '探测包未收到回包', unavailable: '未取得有效样本', path_changed: '测试期间出口变化'
+};
+
+function qualityValue(value, unit) {
+	if (value == null || !Number.isFinite(Number(value))) return '未测';
+	const amount = Number(value);
+	if (unit === 'kbps') return amount < 1000 ? amount + ' kbps' : (amount / 1000).toFixed(2) + ' Mbps';
+	return amount.toFixed(1) + ' ms';
+}
+
+async function measureBrowserPath() {
+	const samples = [];
+	const count = 4;
+	const url = new URL(L.resource('view/status/soft-router-doctor.js'), location.href);
+	if (url.origin !== location.origin) return null;
+	for (let index = 0; index < count; index++) {
+		const controller = new AbortController();
+		const timer = window.setTimeout(() => controller.abort(), 1200);
+		const start = performance.now();
+		try {
+			const response = await fetch(url, { method: 'HEAD', cache: 'no-store',
+				credentials: 'same-origin', signal: controller.signal });
+			if (response.ok) samples.push(performance.now() - start);
+		} catch {
+			// Keep other samples when a request times out.
+		} finally {
+			window.clearTimeout(timer);
+		}
+	}
+	samples.sort((a, b) => a - b);
+	const half = Math.floor(samples.length / 2);
+	const median = samples.length % 2 ? samples[half] : (samples[half - 1] + samples[half]) / 2;
+	return { received: samples.length, count, median };
+}
+
+function renderQuality(paths, localPath) {
+	const local = localPath ? E('div', { class: 'srd-quality-local' }, [
+		text('strong', '浏览器 → 软路由'),
+		text('span', (localPath.received ? '请求耗时中位数 ' + qualityValue(localPath.median, 'ms') + ' · ' : '') +
+			localPath.received + ' / ' + localPath.count + ' 次有响应 · 含浏览器和管理服务处理时间', 'srd-map-meta')
+	]) : null;
+	if (!paths.length) return [local, text('p', '没有找到可用于探测的公网出口。', 'srd-accel-copy')].filter(Boolean);
+	const overlap = paths.filter(item => ['elevated_upload', 'elevated_download', 'elevated_both'].includes(item.result));
+	const lost = paths.filter(item => item.result === 'loss');
+	const comparable = paths.filter(item => item.reference_ms != null && item.result !== 'reference_saved');
+	let title = '本轮没有拿到足够的对照样本';
+	let detail = '工具会在出口流量较低时保存延迟参考。可在卡顿出现时再测一次。';
+	if (overlap.length) {
+		const same = overlap.every(item => item.result === overlap[0].result);
+		title = same ? qualityLabels[overlap[0].result] : '有流量时，多个样本的延迟升高';
+		detail = overlap.length + ' 个探测目标的延迟明显高于各自的轻载参考。可在相关上传或下载暂停时复测，验证是否随流量回落。';
+	} else if (lost.length) {
+		title = lost.length > 1 ? '多个探测目标出现丢包' : '有一个探测目标出现丢包';
+		detail = '查看下方各个目标的回包数。不同目标的表现可帮助区分单个路径和更广泛的异常。';
+	} else if (paths.some(item => item.result === 'elevated')) {
+		title = '部分样本延迟高于轻载参考';
+		detail = '本轮流量不足以判断方向，可结合故障时段和另一次采样对照。';
+	} else if (paths.some(item => item.result === 'similar')) {
+		title = '有对照的样本接近轻载参考';
+		detail = comparable.length + ' 个目标有同出口轻载记录。可在卡顿发生时复测，比较该时刻的延迟和流量。';
+	} else if (paths.some(item => item.result === 'reference_saved')) {
+		title = '已保存本轮轻载参考';
+		detail = '下次在同一出口和目标上采样时，就可以对比延迟变化。';
+	} else if (paths.every(item => ['no_reply', 'unavailable'].includes(item.result))) {
+		title = '这轮探测未取得有效回包';
+		detail = '探测目标可能过滤 ICMP。可结合体检中的网页访问结果进一步核对。';
+	} else if (paths.every(item => item.result === 'path_changed')) {
+		title = '测试期间公网出口发生变化';
+		detail = '出口稳定后复测可获得可比较的结果。';
+	}
+	return [
+		E('div', { class: 'srd-quality-summary' }, [
+			text('strong', title), text('p', detail, 'srd-accel-copy')
+		]),
+		local,
+		E('ul', { class: 'srd-quality-paths' }, paths.map(item => {
+			const facts = [
+				['往返中位数', qualityValue(item.median_ms, 'ms')],
+				['最高', qualityValue(item.max_ms, 'ms')],
+				['轻载参考', qualityValue(item.reference_ms, 'ms')],
+				['回包', item.sent ? item.received + ' / ' + item.sent : '未测'],
+				['上行流量', qualityValue(item.upload_kbps, 'kbps')],
+				['下行流量', qualityValue(item.download_kbps, 'kbps')]
+			];
+			const warning = ['loss', 'no_reply', 'elevated', 'elevated_upload', 'elevated_download',
+				'elevated_both', 'path_changed'].includes(item.result);
+			return E('li', {}, [
+				E('div', { class: 'srd-quality-path-head' }, [
+					text('strong', 'IPv' + item.family + ' · ' + item.target),
+					text('span', item.device, 'srd-map-meta'),
+					chip(warning ? 'warning' : 'skipped', qualityLabels[item.result] || '待确认')
+				]),
+				E('dl', { class: 'srd-quality-stats' }, facts.map(([label, value]) => E('div', {}, [
+					text('dt', label), text('dd', value)
+				])))
+			]);
+		})),
+		text('p', '以上是软路由到固定目标的往返样本，以及对应出口在采样期间的平均流量。', 'srd-map-meta')
+	].filter(Boolean);
+}
+
 function stageItems(states) {
 	const status = { ready: '待检查', running: '检查中', done: '完成', skipped: '未运行', failed: '未完成' };
 	return phases.map((phase, index) => E('li', { 'class': 'srd-step', 'data-state': states[index] }, [
@@ -955,6 +1064,7 @@ return view.extend({
 		let busy = false;
 		let accelerating = false;
 		let mapping = false;
+		let measuringQuality = false;
 		let repairInFlight = false;
 		let progress = ['ready', 'ready'];
 		const live = E('div', { 'class': 'srd-sr', 'role': 'status', 'aria-live': 'polite' });
@@ -976,6 +1086,9 @@ return view.extend({
 		const exportButton = button('下载报告', () => { if (report) downloadReport(report); });
 		const speedButton = button('一键加速', () => runAcceleration());
 		const mapButton = button('网络拓扑', () => runTopology());
+		const qualityButton = button('卡顿诊断', runQuality);
+		qualityButton.setAttribute('aria-controls', 'srd-quality');
+		qualityButton.setAttribute('aria-expanded', 'false');
 		mapButton.setAttribute('aria-controls', 'srd-network-map');
 		mapButton.setAttribute('aria-expanded', 'false');
 		speedButton.setAttribute('aria-controls', 'srd-accel');
@@ -995,6 +1108,46 @@ return view.extend({
 			]),
 			speedContent
 		]);
+		const qualityContent = E('div', { 'aria-live': 'polite' });
+		const qualityAgain = button('重新采样', runQuality);
+		const qualityPanel = E('section', { class: 'srd-accel', id: 'srd-quality', hidden: true,
+			'aria-labelledby': 'srd-quality-title' }, [
+			E('div', { class: 'srd-quality-header' }, [
+				E('h3', { class: 'srd-section-title', id: 'srd-quality-title' }, '卡顿诊断'),
+				E('div', { class: 'srd-quality-actions' }, [qualityAgain, button('收起', () => {
+					hideQuality();
+					qualityButton.focus();
+				})])
+			]),
+			qualityContent
+		]);
+
+		function hideQuality() {
+			qualityPanel.hidden = true;
+			qualityButton.setAttribute('aria-expanded', 'false');
+		}
+
+		async function runQuality() {
+			if (measuringQuality || busy || accelerating || mapping) return;
+			measuringQuality = true;
+			qualityPanel.hidden = false;
+			qualityButton.setAttribute('aria-expanded', 'true');
+			speedPanel.hidden = mapPanel.hidden = true;
+			speedButton.setAttribute('aria-expanded', 'false');
+			mapButton.setAttribute('aria-expanded', 'false');
+			dom.content(qualityContent, text('p', '正在采样管理连接、出口流量和公网回包，约需 8 秒。', 'srd-accel-copy'));
+			update();
+			try {
+				const [result, localPath] = await Promise.all([measureQuality(), measureBrowserPath().catch(() => null)]);
+				dom.content(qualityContent, Array.isArray(result?.paths) ? renderQuality(result.paths, localPath) :
+					text('p', result?.detail || '本轮未取得卡顿诊断结果。', 'srd-accel-copy'));
+			} catch {
+				dom.content(qualityContent, text('p', '暂时无法完成卡顿诊断，请稍后复测。', 'srd-accel-copy'));
+			} finally {
+				measuringQuality = false;
+				update();
+			}
+		}
 
 		const saved = savedNetworkDiagram(canEditTopology === true);
 		const mapContent = E('div');
@@ -1034,8 +1187,9 @@ return view.extend({
 		}
 
 		async function runTopology() {
-			if (busy || accelerating || mapping) return;
+			if (busy || accelerating || mapping || measuringQuality) return;
 			mapping = true;
+			hideQuality();
 			discovery = null;
 			mapPanel.hidden = false;
 			saved.refresh();
@@ -1104,7 +1258,8 @@ return view.extend({
 		}
 
 		async function runAcceleration(plan, items = []) {
-			if (busy || accelerating || mapping) return;
+			if (busy || accelerating || mapping || measuringQuality) return;
+			hideQuality();
 			accelerating = true;
 			mapPanel.hidden = true;
 			mapButton.setAttribute('aria-expanded', 'false');
@@ -1159,7 +1314,8 @@ return view.extend({
 
 		function update() {
 			primary.textContent = busy ? (repairInFlight ? '正在修复' : '体检中') : report ? '重新体检' : '开始体检';
-			primary.disabled = local.disabled = speedButton.disabled = mapButton.disabled = busy || accelerating || mapping;
+			primary.disabled = local.disabled = speedButton.disabled = mapButton.disabled =
+				qualityButton.disabled = qualityAgain.disabled = busy || accelerating || mapping || measuringQuality;
 			discoverButton.disabled = busy || accelerating || mapping;
 			exportButton.disabled = busy || accelerating || mapping || !report;
 			dom.content(steps, stageItems(progress));
@@ -1204,7 +1360,8 @@ return view.extend({
 		}
 
 		async function runScan(localOnly, keepNotice) {
-			if (busy || accelerating || mapping) return;
+			if (busy || accelerating || mapping || measuringQuality) return;
+			hideQuality();
 			busy = true;
 			progress = [ 'running', localOnly ? 'skipped' : 'ready' ];
 			if (!keepNotice) setNotice('');
@@ -1241,7 +1398,7 @@ return view.extend({
 		}
 
 		function showConfirmation() {
-			if (busy || accelerating || mapping) return;
+			if (busy || accelerating || mapping || measuringQuality) return;
 			ui.showModal('启动 dnsmasq 并复测', [
 				text('p', '启动会使用路由器现有的 DNS 和 DHCP 配置。继续前，请确认这台设备负责对应服务。'),
 				E('div', { 'class': 'right' }, [
@@ -1254,7 +1411,7 @@ return view.extend({
 
 		async function runRepair() {
 			ui.hideModal();
-			if (busy || accelerating || mapping) return;
+			if (busy || accelerating || mapping || measuringQuality) return;
 			const localOnly = report.mode === 'local';
 			busy = repairInFlight = true;
 			summary.textContent = '正在启动 DNS 服务并验证实际解析。';
@@ -1284,12 +1441,12 @@ return view.extend({
 					E('div', { 'class': 'srd-hero-intro' }, [
 						E('h2', { 'class': 'srd-title', 'id': 'srd-page-title' }, '软路由体检'), summary
 					]),
-					E('div', { 'class': 'srd-actions' }, [ primary, local, mapButton, speedButton, exportButton ]),
+					E('div', { 'class': 'srd-actions' }, [ primary, local, mapButton, qualityButton, speedButton, exportButton ]),
 					meta
 				]),
 				dial
 			]),
-			steps, live, notice, recorder.card, mapPanel, speedPanel, results
+			steps, live, notice, qualityPanel, recorder.card, mapPanel, speedPanel, results
 		]);
 	}
 });

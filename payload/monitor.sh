@@ -214,6 +214,9 @@ monitor_loop() {
 	trap '[ -z "$sleep_pid" ] || kill "$sleep_pid" 2>/dev/null; exit 0' TERM INT HUP
 	while :; do
 		monitor_sample "$((iteration == 0))"
+		if [ "$iteration" -eq 0 ] && command -v quality_probe >/dev/null 2>&1; then
+			quality_probe baseline
+		fi
 		iteration=$(((iteration + 1) % 4))
 		sleep 15 &
 		sleep_pid=$!

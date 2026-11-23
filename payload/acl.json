@@ -3,7 +3,7 @@
     "description": "Read and diagnose this router. Separately allow guarded DNS recovery.",
     "read": {
       "ubus": {
-        "soft-router-doctor": ["status", "monitorStatus", "scan", "scanLocal", "accelerationPlan"]
+        "soft-router-doctor": ["status", "quality", "monitorStatus", "scan", "scanLocal", "accelerationPlan"]
       }
     },
     "write": {

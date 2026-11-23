@@ -7,6 +7,7 @@ export PATH
 REVISION_FILE=/usr/share/soft-router-doctor/installed
 SAVED_TOPOLOGY_LIB=/usr/lib/soft-router-doctor-topology.sh
 MONITOR_LIB=/usr/lib/soft-router-doctor-monitor.sh
+QUALITY_LIB=/usr/lib/soft-router-doctor-quality.sh
 REPAIR_LOCK=/var/lock/soft-router-doctor-repair
 APK_CACHE=/var/cache/apk
 APK_CUSTOM_CACHE=/etc/apk/cache
@@ -21,7 +22,7 @@ field() {
 }
 
 identity() {
-	json_add_string version '0.9.0-dev'
+	json_add_string version '0.10.0-dev'
 	IFS= read -r revision 2>/dev/null < "$REVISION_FILE" || revision=uninstalled
 	json_add_string revision "$revision"
 }
@@ -1446,11 +1447,18 @@ if [ "$1" = accelerate ]; then
 fi
 
 case "$1" in
+	quality)
+		[ -r "$QUALITY_LIB" ] || { repair_result unavailable '卡顿诊断组件不可用。'; exit 1; }
+		. "$QUALITY_LIB"
+		quality_probe foreground
+		exit ;;
 	monitor|monitor-status|monitor-set)
 		[ -r "$MONITOR_LIB" ] || { repair_result unavailable '网络记录组件不可用。'; exit 1; }
 		. "$MONITOR_LIB"
 		case "$1" in
-			monitor) monitor_loop ;;
+			monitor)
+				[ ! -r "$QUALITY_LIB" ] || . "$QUALITY_LIB"
+				monitor_loop ;;
 			monitor-status) monitor_status ;;
 			monitor-set) monitor_set "$2" ;;
 		esac
