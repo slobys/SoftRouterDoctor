@@ -8,6 +8,7 @@
 
 const networkMap = rpc.declare({ object: 'soft-router-doctor', method: 'networkMap', params: ['peer'], reject: true });
 const measureQuality = rpc.declare({ object: 'soft-router-doctor', method: 'quality', reject: true });
+const diagnoseWebsite = rpc.declare({ object: 'soft-router-doctor', method: 'diagnoseSite', params: ['host'], reject: true });
 const monitorStatus = rpc.declare({ object: 'soft-router-doctor', method: 'monitorStatus', reject: true });
 const monitorSet = rpc.declare({ object: 'soft-router-doctor', method: 'monitorSet', params: ['enabled'], reject: true });
 const savedTopology = rpc.declare({ object: 'soft-router-doctor', method: 'savedTopology', reject: true });
@@ -128,6 +129,8 @@ const styles = [
 	'.srd-root .srd-record-items{list-style:none;margin:7px 0 12px;padding:0}.srd-record-items li{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:2px 12px;padding:7px 0;border-top:1px solid var(--line)}.srd-record-items strong{font-size:.85rem}.srd-record-timeline .srd-button{margin-bottom:4px}',
 	'.srd-quality-header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px 12px;margin-bottom:10px}.srd-root .srd-quality-header .srd-section-title{flex:1 1 9rem;min-width:0;width:auto;margin:0}.srd-quality-actions{display:flex;gap:6px;flex-wrap:wrap}.srd-quality-summary{background:var(--quiet);border-radius:7px;padding:9px 11px}.srd-quality-summary strong{font-size:.96rem}.srd-quality-local{margin-top:10px;padding:7px 0}.srd-quality-local strong{font-size:.85rem}',
 	'.srd-root .srd-quality-paths{list-style:none;margin:10px 0;padding:0}.srd-quality-paths li{border-top:1px solid var(--line);padding:9px 0;overflow-wrap:anywhere}.srd-quality-path-head{display:flex;align-items:center;flex-wrap:wrap;gap:4px 9px}.srd-quality-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,108px),1fr));gap:5px 10px;margin:6px 0 0}.srd-quality-stats dt{color:var(--muted);font-size:.76rem}.srd-quality-stats dd{margin:0;font-size:.85rem;font-weight:660;font-variant-numeric:tabular-nums}',
+	'.srd-website-form{margin:9px 0 12px}.srd-website-form label{font-size:.85rem;font-weight:650}.srd-website-input{display:flex;flex-wrap:wrap;gap:6px 8px;margin:5px 0}.srd-root .srd-website-input input{flex:1 1 230px;min-width:0;min-height:44px;max-width:100%;border:1px solid var(--line);border-radius:8px;padding:7px 10px;color:var(--ink);background:var(--paper)}.srd-root .srd-website-input input::placeholder{color:var(--muted)}.srd-root .srd-website-input input[aria-invalid=true]{border-color:var(--bad)}.srd-root .srd-website-input input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}',
+	'.srd-website-result{padding:9px 11px;background:var(--quiet);border-radius:7px;overflow-wrap:anywhere}.srd-website-families{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:10px 22px;margin-top:12px}.srd-website-families section{min-width:0}.srd-website-families section>p{overflow-wrap:anywhere}.srd-website-steps{margin:5px 0 0}.srd-website-steps>div{display:grid;grid-template-columns:minmax(80px,.8fr) minmax(0,2fr);gap:4px 10px;padding:7px 0;border-top:1px solid var(--line)}.srd-website-steps dt{font-size:.83rem;color:var(--ink)}.srd-website-steps dd{margin:0;min-width:0}.srd-website-steps .srd-chip{white-space:normal;overflow-wrap:anywhere}',
 	'.srd-path-evidence{margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}.srd-path-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:6px 0}.srd-root .srd-path-fact{font-size:.92rem;margin-top:8px}.srd-path-devices{list-style:none;padding:0;margin:4px 0 0}.srd-path-devices li{padding:8px 0;border-top:1px solid var(--line);overflow-wrap:anywhere}.srd-root .srd-path-actions p{margin:0}.srd-mode-label{display:inline-block;margin-inline-start:10px;font-size:.8rem;color:var(--accent);font-weight:600}',
 	'.srd-root .srd-pc-path{display:flex;flex-wrap:wrap;gap:8px;list-style:none;margin:10px 0;padding:0}.srd-pc-path li{display:grid;align-content:start;gap:3px;flex:1 1 136px;min-width:0;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:var(--quiet);overflow-wrap:anywhere}.srd-pc-path li[data-state=unknown]{border-style:dashed;background:transparent}.srd-pc-path strong{font-size:.84rem;color:var(--ink)}.srd-pc-path li span{font-size:.77rem;color:var(--muted)}',
 	'.srd-map-clients{margin:0;padding:0;list-style:none}.srd-map-clients li{display:flex;align-items:baseline;justify-content:space-between;gap:6px;padding:6px 0;border-top:1px solid var(--line)}.srd-map-clients li>div{min-width:0}.srd-map-clients strong{font-size:.87rem}',
@@ -1041,6 +1044,113 @@ function renderQuality(paths, localPath) {
 	].filter(Boolean);
 }
 
+function websiteHost(value) {
+	const input = value.trim();
+	if (!input || /[\x00-\x20\x7f]/.test(input)) return null;
+	try {
+		const qualified = /^[a-z][a-z0-9+.-]*:\/\//i.test(input);
+		const url = new URL(qualified ? input : input.startsWith('//') ? 'https:' + input : 'https://' + input);
+		if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.port) return null;
+		const host = url.hostname.replace(/\.$/, '');
+		const labels = host.split('.');
+		if (host.length > 253 || labels.length < 2 || !/^[a-z]/i.test(labels.at(-1))) return null;
+		if (!labels.every(label => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i.test(label))) return null;
+		return host;
+	} catch {
+		return null;
+	}
+}
+
+function websiteSteps(family) {
+	const record = family.family === 6 ? 'AAAA' : 'A';
+	const dns = {
+		resolved: ['passed', family.eligible + ' 个公网 ' + record + ' 地址'],
+		no_records: ['skipped', '站点未发布 ' + record + ' 记录'],
+		nxdomain: ['failed', 'DNS 返回域名不存在'],
+		timeout: ['failed', 'DNS 查询超时'],
+		error: ['failed', 'DNS 服务器返回错误'],
+		restricted: ['warning', 'DNS 仅返回非公网地址'],
+		unavailable: ['skipped', '未取得可识别的 DNS 答复']
+	};
+	const tcp = {
+		passed: ['passed', '已连到站点的 443 端口'],
+		no_route: ['failed', '路由器未找到可用出口'],
+		scope_unverified: ['skipped', '该地址未走可确认的公网出口'],
+		timeout: ['failed', '建立 TCP 连接超时'],
+		failed: ['failed', '路由器未能建立 TCP 连接'],
+		unavailable: ['skipped', '未确认连接结果']
+	};
+	const tls = {
+		passed: ['passed', '握手与证书验证通过'],
+		certificate: ['failed', '站点证书校验未通过'],
+		local_ca: ['failed', '路由器无法读取本机 CA 证书'],
+		timeout: ['failed', 'TCP 已连接，TLS 握手超时'],
+		failed: ['failed', 'TCP 已连接，TLS 握手失败'],
+		unavailable: ['skipped', '未确认握手结果']
+	};
+	let http = ['skipped', '未进入 HTTPS 响应阶段'];
+	if (family.https === 'response') {
+		const status = family.http_code;
+		const suffix = status >= 500 ? '站点返回服务错误' : status === 405 ? '站点拒绝 HEAD 请求' :
+			status >= 400 ? '站点返回请求状态' : status >= 300 ? '站点返回重定向' : '首页返回响应';
+		http = [status >= 400 ? 'warning' : 'passed', 'HTTP ' + status + ' · ' + suffix];
+	} else if (family.https === 'no_response') {
+		http = ['failed', 'TLS 已成功，未取得 HTTP 状态'];
+	} else if (family.https === 'tool_missing') {
+		http = ['skipped', '需要路由器提供 curl'];
+	}
+	return [
+		['DNS 解析', ...(dns[family.dns] || ['skipped', '未验证'])],
+		['TCP 443', ...(tcp[family.tcp] || ['skipped', '等待可用地址']), family.tcp_ms],
+		['TLS 握手', ...(tls[family.tls] || ['skipped', '未进入 TLS 阶段']), family.tls_ms],
+		['HTTPS 响应', ...http]
+	];
+}
+
+function websiteSummary(families, reports) {
+	const completed = families.filter(item => item.https === 'response');
+	const firstFailure = reports.flat().find(step => step[1] === 'failed');
+	const failedFamilies = families.filter((_, index) => reports[index].some(step => step[1] === 'failed'));
+	if (completed.length && failedFamilies.length) {
+		const done = completed.map(item => 'IPv' + item.family).join('、');
+		const failed = failedFamilies.map(item => {
+			const stage = reports[families.indexOf(item)].find(step => step[1] === 'failed');
+			return 'IPv' + item.family + ' ' + stage[0] + '失败';
+		}).join('、');
+		return done + ' 已返回 HTTPS 响应，' + failed;
+	}
+	if (completed.length) {
+		const rejected = completed.filter(item => item.http_code >= 400);
+		if (rejected.length === completed.length) return 'HTTPS 已连接，站点返回 HTTP ' + rejected.map(item => item.http_code).join(' / ');
+		if (rejected.length) return '各协议已连接 HTTPS，站点响应状态不同';
+		return completed.map(item => 'IPv' + item.family).join('、') + ' 已返回 HTTPS 响应';
+	}
+	if (firstFailure) return '本轮在 ' + firstFailure[0] + ' 阶段发现问题';
+	if (families.some(item => item.dns === 'restricted')) return 'DNS 返回的地址不在公网探测范围';
+	return '本轮未取得 HTTPS 响应，请查看两种协议的检测明细';
+}
+
+function renderWebsite(report) {
+	const families = report.families;
+	const reports = families.map(websiteSteps);
+	return [
+		E('div', { class: 'srd-website-result' }, [
+			text('strong', websiteSummary(families, reports)),
+			text('p', report.host + ' · 由软路由发起', 'srd-map-meta')
+		]),
+		E('div', { class: 'srd-website-families' }, families.map((family, index) => E('section', {}, [
+			text('h4', 'IPv' + family.family, 'srd-rank-title'),
+			family.address ? text('p', family.address + (family.tried_addresses > 1 ?
+				' · 共核对 ' + family.tried_addresses + ' 个地址' : ''), 'srd-map-meta') : null,
+			E('dl', { class: 'srd-website-steps' }, reports[index].map(([label, state, detail, elapsed]) => E('div', {}, [
+				text('dt', label),
+				E('dd', {}, [chip(state, detail),
+					Number.isFinite(elapsed) ? text('span', elapsed + ' ms', 'srd-map-meta') : null].filter(Boolean))
+			])))
+		].filter(Boolean))))
+	];
+}
+
 function stageItems(states) {
 	const status = { ready: '待检查', running: '检查中', done: '完成', skipped: '未运行', failed: '未完成' };
 	return phases.map((phase, index) => E('li', { 'class': 'srd-step', 'data-state': states[index] }, [
@@ -1065,6 +1175,7 @@ return view.extend({
 		let accelerating = false;
 		let mapping = false;
 		let measuringQuality = false;
+		let checkingWebsite = false;
 		let repairInFlight = false;
 		let progress = ['ready', 'ready'];
 		const live = E('div', { 'class': 'srd-sr', 'role': 'status', 'aria-live': 'polite' });
@@ -1087,6 +1198,9 @@ return view.extend({
 		const speedButton = button('一键加速', () => runAcceleration());
 		const mapButton = button('网络拓扑', () => runTopology());
 		const qualityButton = button('卡顿诊断', runQuality);
+		const websiteButton = button('网站诊断', openWebsite);
+		websiteButton.setAttribute('aria-controls', 'srd-website');
+		websiteButton.setAttribute('aria-expanded', 'false');
 		qualityButton.setAttribute('aria-controls', 'srd-quality');
 		qualityButton.setAttribute('aria-expanded', 'false');
 		mapButton.setAttribute('aria-controls', 'srd-network-map');
@@ -1121,6 +1235,64 @@ return view.extend({
 			]),
 			qualityContent
 		]);
+		const websiteInput = E('input', { id: 'srd-website-url', type: 'text', inputmode: 'url',
+			maxlength: 512, autocomplete: 'off', spellcheck: 'false', placeholder: '例如 https://example.com',
+			'aria-describedby': 'srd-website-hint' });
+		const websiteSubmit = E('button', { type: 'submit', class: 'srd-primary' }, '开始诊断');
+		const websiteContent = E('div', { 'aria-live': 'polite' });
+		const websitePanel = E('section', { class: 'srd-accel', id: 'srd-website', hidden: true,
+			'aria-labelledby': 'srd-website-title' }, [
+			E('div', { class: 'srd-quality-header' }, [
+				E('h3', { class: 'srd-section-title', id: 'srd-website-title' }, '网站诊断'),
+				button('收起', () => { hideWebsite(); websiteButton.focus(); })
+			]),
+			E('form', { class: 'srd-website-form', submit: event => { event.preventDefault(); runWebsite(); } }, [
+				E('label', { for: 'srd-website-url' }, '网址或域名'),
+				E('div', { class: 'srd-website-input' }, [websiteInput, websiteSubmit]),
+				E('p', { id: 'srd-website-hint', class: 'srd-map-meta' }, '按域名检测公网 HTTPS 首页，忽略网址中的路径和参数。')
+			]),
+			websiteContent
+		]);
+
+		function hideWebsite() {
+			websitePanel.hidden = true;
+			websiteButton.setAttribute('aria-expanded', 'false');
+		}
+
+		function openWebsite() {
+			if (checkingWebsite || measuringQuality || busy || accelerating || mapping) return;
+			websitePanel.hidden = false;
+			websiteButton.setAttribute('aria-expanded', 'true');
+			hideQuality();
+			speedPanel.hidden = mapPanel.hidden = true;
+			speedButton.setAttribute('aria-expanded', 'false');
+			mapButton.setAttribute('aria-expanded', 'false');
+			websiteInput.focus();
+		}
+
+		async function runWebsite() {
+			if (checkingWebsite || measuringQuality || busy || accelerating || mapping) return;
+			const host = websiteHost(websiteInput.value);
+			websiteInput.setAttribute('aria-invalid', host ? 'false' : 'true');
+			if (!host) {
+				dom.content(websiteContent, text('p', '请输入含公网域名的网址，使用默认 HTTP 或 HTTPS 端口。', 'srd-accel-copy'));
+				websiteInput.focus();
+				return;
+			}
+			checkingWebsite = true;
+			dom.content(websiteContent, text('p', '正在查询 DNS 并分别检测 IPv4 和 IPv6…', 'srd-accel-copy'));
+			update();
+			try {
+				const result = await diagnoseWebsite(host);
+				dom.content(websiteContent, Array.isArray(result?.families) && result.families.length ?
+					renderWebsite(result) : text('p', result?.detail || '本轮未取得网站诊断结果。', 'srd-accel-copy'));
+			} catch {
+				dom.content(websiteContent, text('p', '暂时无法完成网站诊断，请检查登录状态后重试。', 'srd-accel-copy'));
+			} finally {
+				checkingWebsite = false;
+				update();
+			}
+		}
 
 		function hideQuality() {
 			qualityPanel.hidden = true;
@@ -1128,7 +1300,8 @@ return view.extend({
 		}
 
 		async function runQuality() {
-			if (measuringQuality || busy || accelerating || mapping) return;
+			if (measuringQuality || checkingWebsite || busy || accelerating || mapping) return;
+			hideWebsite();
 			measuringQuality = true;
 			qualityPanel.hidden = false;
 			qualityButton.setAttribute('aria-expanded', 'true');
@@ -1187,7 +1360,8 @@ return view.extend({
 		}
 
 		async function runTopology() {
-			if (busy || accelerating || mapping || measuringQuality) return;
+			if (busy || accelerating || mapping || measuringQuality || checkingWebsite) return;
+			hideWebsite();
 			mapping = true;
 			hideQuality();
 			discovery = null;
@@ -1258,7 +1432,8 @@ return view.extend({
 		}
 
 		async function runAcceleration(plan, items = []) {
-			if (busy || accelerating || mapping || measuringQuality) return;
+			if (busy || accelerating || mapping || measuringQuality || checkingWebsite) return;
+			hideWebsite();
 			hideQuality();
 			accelerating = true;
 			mapPanel.hidden = true;
@@ -1315,7 +1490,9 @@ return view.extend({
 		function update() {
 			primary.textContent = busy ? (repairInFlight ? '正在修复' : '体检中') : report ? '重新体检' : '开始体检';
 			primary.disabled = local.disabled = speedButton.disabled = mapButton.disabled =
-				qualityButton.disabled = qualityAgain.disabled = busy || accelerating || mapping || measuringQuality;
+				qualityButton.disabled = qualityAgain.disabled = websiteButton.disabled = websiteSubmit.disabled =
+					busy || accelerating || mapping || measuringQuality || checkingWebsite;
+			websiteInput.disabled = checkingWebsite;
 			discoverButton.disabled = busy || accelerating || mapping;
 			exportButton.disabled = busy || accelerating || mapping || !report;
 			dom.content(steps, stageItems(progress));
@@ -1360,7 +1537,8 @@ return view.extend({
 		}
 
 		async function runScan(localOnly, keepNotice) {
-			if (busy || accelerating || mapping || measuringQuality) return;
+			if (busy || accelerating || mapping || measuringQuality || checkingWebsite) return;
+			hideWebsite();
 			hideQuality();
 			busy = true;
 			progress = [ 'running', localOnly ? 'skipped' : 'ready' ];
@@ -1441,12 +1619,12 @@ return view.extend({
 					E('div', { 'class': 'srd-hero-intro' }, [
 						E('h2', { 'class': 'srd-title', 'id': 'srd-page-title' }, '软路由体检'), summary
 					]),
-					E('div', { 'class': 'srd-actions' }, [ primary, local, mapButton, qualityButton, speedButton, exportButton ]),
+					E('div', { 'class': 'srd-actions' }, [ primary, local, mapButton, qualityButton, websiteButton, speedButton, exportButton ]),
 					meta
 				]),
 				dial
 			]),
-			steps, live, notice, qualityPanel, recorder.card, mapPanel, speedPanel, results
+			steps, live, notice, websitePanel, qualityPanel, recorder.card, mapPanel, speedPanel, results
 		]);
 	}
 });

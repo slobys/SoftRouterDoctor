@@ -23,6 +23,7 @@ payload/doctor|/usr/sbin/soft-router-doctor|755
 payload/topology.sh|/usr/lib/soft-router-doctor-topology.sh|644
 payload/monitor.sh|/usr/lib/soft-router-doctor-monitor.sh|644
 payload/quality.sh|/usr/lib/soft-router-doctor-quality.sh|644
+payload/site.sh|/usr/lib/soft-router-doctor-site.sh|644
 payload/monitor.init|/etc/init.d/soft-router-doctor-monitor|755
 payload/rpc|/usr/libexec/rpcd/soft-router-doctor|755
 payload/acl.json|/usr/share/rpcd/acl.d/luci-app-soft-router-doctor.json|644
@@ -196,7 +197,7 @@ prepare_payload() {
 		local_hash=$(sha "$stage/SHA256SUMS") || fail '无法计算本地清单指纹。'
 		revision=local-$local_hash
 	fi
-	for program in payload/doctor payload/topology.sh payload/monitor.sh payload/monitor.init payload/quality.sh payload/rpc install.sh; do
+	for program in payload/doctor payload/topology.sh payload/monitor.sh payload/monitor.init payload/quality.sh payload/site.sh payload/rpc install.sh; do
 		sh -n "$stage/payload/$program" || fail "Shell 语法错误：$program"
 	done
 }

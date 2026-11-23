@@ -2,9 +2,12 @@
 
 case "$1:$2" in
 	list:)
-		printf '%s\n' '{"status":{},"quality":{},"monitorStatus":{},"monitorSet":{"enabled":true},"networkMap":{"peer":""},"savedTopology":{},"editTopology":{"action":"","revision":"","id":"","address":"","name":"","mode":""},"discoverRouters":{"listenOnly":true},"scan":{},"scanLocal":{},"repairDns":{"confirm":true},"accelerationPlan":{},"applyAcceleration":{"confirm":true,"token":""},"optimizeService":{"confirm":true,"service":"","token":"","stop":true,"disable":true}}' ;;
+		printf '%s\n' '{"status":{},"quality":{},"diagnoseSite":{"host":""},"monitorStatus":{},"monitorSet":{"enabled":true},"networkMap":{"peer":""},"savedTopology":{},"editTopology":{"action":"","revision":"","id":"","address":"","name":"","mode":""},"discoverRouters":{"listenOnly":true},"scan":{},"scanLocal":{},"repairDns":{"confirm":true},"accelerationPlan":{},"applyAcceleration":{"confirm":true,"token":""},"optimizeService":{"confirm":true,"service":"","token":"","stop":true,"disable":true}}' ;;
 	call:status)
 		exec /usr/sbin/soft-router-doctor status ;;
+	call:diagnoseSite)
+		host=$(jsonfilter -e '@.host' 2>/dev/null)
+		exec /usr/sbin/soft-router-doctor site "$host" ;;
 	call:quality)
 		exec /usr/sbin/soft-router-doctor quality ;;
 	call:monitorStatus)

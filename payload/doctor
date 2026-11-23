@@ -8,6 +8,7 @@ REVISION_FILE=/usr/share/soft-router-doctor/installed
 SAVED_TOPOLOGY_LIB=/usr/lib/soft-router-doctor-topology.sh
 MONITOR_LIB=/usr/lib/soft-router-doctor-monitor.sh
 QUALITY_LIB=/usr/lib/soft-router-doctor-quality.sh
+SITE_LIB=/usr/lib/soft-router-doctor-site.sh
 REPAIR_LOCK=/var/lock/soft-router-doctor-repair
 APK_CACHE=/var/cache/apk
 APK_CUSTOM_CACHE=/etc/apk/cache
@@ -22,7 +23,7 @@ field() {
 }
 
 identity() {
-	json_add_string version '0.10.0-dev'
+	json_add_string version '0.11.0-dev'
 	IFS= read -r revision 2>/dev/null < "$REVISION_FILE" || revision=uninstalled
 	json_add_string revision "$revision"
 }
@@ -1447,6 +1448,12 @@ if [ "$1" = accelerate ]; then
 fi
 
 case "$1" in
+	site)
+		[ -r "$SITE_LIB" ] || { repair_result unavailable '网站诊断组件不可用。'; exit 1; }
+		[ ! -r "$QUALITY_LIB" ] || . "$QUALITY_LIB"
+		. "$SITE_LIB"
+		diagnose_site "$2"
+		exit ;;
 	quality)
 		[ -r "$QUALITY_LIB" ] || { repair_result unavailable '卡顿诊断组件不可用。'; exit 1; }
 		. "$QUALITY_LIB"
