@@ -9,7 +9,7 @@
 const networkMap = rpc.declare({ object: 'soft-router-doctor', method: 'networkMap', params: ['peer'], reject: true });
 const measureQuality = rpc.declare({ object: 'soft-router-doctor', method: 'quality', reject: true });
 const diagnoseWebsite = rpc.declare({ object: 'soft-router-doctor', method: 'diagnoseSite', params: ['host'], reject: true });
-const diagnoseLan = rpc.declare({ object: 'soft-router-doctor', method: 'lanAccess', params: ['peer', 'target', 'profile'], reject: true });
+const diagnoseLan = rpc.declare({ object: 'soft-router-doctor', method: 'lanAccess', params: ['peer', 'target', 'profile', 'clientCheck'], reject: true });
 const monitorStatus = rpc.declare({ object: 'soft-router-doctor', method: 'monitorStatus', reject: true });
 const monitorSet = rpc.declare({ object: 'soft-router-doctor', method: 'monitorSet', params: ['enabled'], reject: true });
 const savedTopology = rpc.declare({ object: 'soft-router-doctor', method: 'savedTopology', reject: true });
@@ -133,6 +133,7 @@ const styles = [
 	'.srd-website-form{margin:9px 0 12px}.srd-website-form label{font-size:.85rem;font-weight:650}.srd-website-input{display:flex;flex-wrap:wrap;gap:6px 8px;margin:5px 0}.srd-root .srd-website-input input{flex:1 1 230px;min-width:0;min-height:44px;max-width:100%;border:1px solid var(--line);border-radius:8px;padding:7px 10px;color:var(--ink);background:var(--paper)}.srd-root .srd-website-input input::placeholder{color:var(--muted)}.srd-root .srd-website-input input[aria-invalid=true]{border-color:var(--bad)}.srd-root .srd-website-input input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}',
 	'.srd-website-result{padding:9px 11px;background:var(--quiet);border-radius:7px;overflow-wrap:anywhere}.srd-website-families{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:10px 22px;margin-top:12px}.srd-website-families section{min-width:0}.srd-website-families section>p{overflow-wrap:anywhere}.srd-website-steps{margin:5px 0 0}.srd-website-steps>div{display:grid;grid-template-columns:minmax(80px,.8fr) minmax(0,2fr);gap:4px 10px;padding:7px 0;border-top:1px solid var(--line)}.srd-website-steps dt{font-size:.83rem;color:var(--ink)}.srd-website-steps dd{margin:0;min-width:0}.srd-website-steps .srd-chip{white-space:normal;overflow-wrap:anywhere}',
 	'.srd-lan-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));gap:8px;margin:10px 0}.srd-lan-form label{display:grid;gap:4px;min-width:0;font-size:.85rem;font-weight:650}.srd-root .srd-lan-form :is(select,input){width:100%;max-width:100%;min-width:0;min-height:44px;border:1px solid var(--line);border-radius:8px;padding:7px 9px;background-color:var(--paper);color:var(--ink)}.srd-root .srd-lan-form :is(select,input):focus-visible{outline:2px solid var(--accent);outline-offset:1px}.srd-root .srd-lan-form input[aria-invalid=true]{border-color:var(--bad)}.srd-lan-form .srd-primary{align-self:end;justify-self:start}.srd-lan-details dd{overflow-wrap:anywhere;color:var(--ink)}',
+	'.srd-terminal{margin-top:16px}.srd-terminal .srd-rank-title{margin-bottom:5px}.srd-terminal .srd-website-steps{margin:8px 0}.srd-terminal .srd-terminal-line{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:baseline}.srd-terminal details{margin-top:8px}.srd-terminal summary{cursor:pointer}.srd-terminal code{overflow-wrap:anywhere;user-select:all}',
 	'.srd-path-evidence{margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}.srd-path-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:6px 0}.srd-root .srd-path-fact{font-size:.92rem;margin-top:8px}.srd-path-devices{list-style:none;padding:0;margin:4px 0 0}.srd-path-devices li{padding:8px 0;border-top:1px solid var(--line);overflow-wrap:anywhere}.srd-root .srd-path-actions p{margin:0}.srd-mode-label{display:inline-block;margin-inline-start:10px;font-size:.8rem;color:var(--accent);font-weight:600}',
 	'.srd-root .srd-pc-path{display:flex;flex-wrap:wrap;gap:8px;list-style:none;margin:10px 0;padding:0}.srd-pc-path li{display:grid;align-content:start;gap:3px;flex:1 1 136px;min-width:0;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:var(--quiet);overflow-wrap:anywhere}.srd-pc-path li[data-state=unknown]{border-style:dashed;background:transparent}.srd-pc-path strong{font-size:.84rem;color:var(--ink)}.srd-pc-path li span{font-size:.77rem;color:var(--muted)}',
 	'.srd-map-clients{margin:0;padding:0;list-style:none}.srd-map-clients li{display:flex;align-items:baseline;justify-content:space-between;gap:6px;padding:6px 0;border-top:1px solid var(--line)}.srd-map-clients li>div{min-width:0}.srd-map-clients strong{font-size:.87rem}',
@@ -1181,7 +1182,107 @@ function lanSummary(data) {
 	return '本轮未收到目标设备的 Ping 应答';
 }
 
-function renderLanAccess(data) {
+async function terminalWebProbe(context, url) {
+	const controller = new AbortController();
+	const timer = setTimeout(() => controller.abort(), 5000);
+	try {
+		const response = await context.fetch(url, {
+			method: 'HEAD', mode: 'no-cors', credentials: 'omit',
+			cache: 'no-store', referrerPolicy: 'no-referrer', targetAddressSpace: 'local', signal: controller.signal
+		});
+		if (response.type === 'opaque' || response.status >= 100) return 'response';
+		return 'unclear';
+	} catch {
+		if (window.isSecureContext && navigator.permissions?.query) {
+			try {
+				const permission = await navigator.permissions.query({ name: 'local-network' });
+				if (permission.state === 'denied') return 'permission';
+			} catch { /* Older browsers may not expose this permission. */ }
+		}
+		return controller.signal.aborted ? 'timeout' : 'unclear';
+	} finally {
+		clearTimeout(timer);
+	}
+}
+
+async function checkTerminalWeb(address, report) {
+	if (!privateIPv4(address) || report?.state !== 'checked' || !Array.isArray(report.endpoints)) return [];
+	const ports = { http: [80, 5000, 8080], https: [443, 5001, 8443] };
+	const endpoints = report.endpoints.filter(item =>
+		Object.hasOwn(ports, item.scheme) && ports[item.scheme].includes(item.port) &&
+		(item.state === 'response' || item.state === 'certificate'));
+	if (!endpoints.length) return [];
+	const origins = endpoints.map(item => new URL(item.scheme + '://' + address + ':' + item.port).origin);
+	const frame = E('iframe', { hidden: true, title: 'NAS 网页探测', sandbox: 'allow-same-origin' });
+	// Cross-origin no-cors requests must use redirect: follow. Enforce the
+	// selected NAS origins in an isolated document so redirects cannot leave them.
+	frame.srcdoc = '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; connect-src ' +
+		origins.join(' ') + '">';
+	let loadTimer;
+	const loaded = new Promise(resolve => {
+		frame.addEventListener('load', () => resolve(true), { once: true });
+		loadTimer = setTimeout(() => resolve(false), 1500);
+	});
+	try {
+		document.body.appendChild(frame);
+		const ready = await loaded;
+		return await Promise.all(endpoints.map(async (endpoint, index) => ({
+			...endpoint, client: ready ? await terminalWebProbe(frame.contentWindow, origins[index] + '/') : 'unclear'
+		})));
+	} finally {
+		clearTimeout(loadTimer);
+		frame.remove();
+	}
+}
+
+function renderTerminalAccess(data, checks) {
+	const { service, target, web } = data;
+	const answered = checks.some(check => check.client === 'response');
+	const comparable = checks.some(check => check.state === 'response');
+	const permission = checks.some(check => check.client === 'permission');
+	const title = answered ? '本机收到了 NAS 网页的响应' :
+		comparable ? '软路由收到 NAS 网页响应，本机未确认' : '本机到 NAS 的路径暂未确认';
+	const explanation = answered ?
+		'网页响应说明这台手机或电脑能访问 NAS 的网页端口。SMB 445 端口、登录和共享权限仍需单独核对。' :
+		permission ? '浏览器的本地网络权限显示为阻止。可在当前 LuCI 的站点设置里核对权限，然后重试。' :
+		comparable ? '本机未取得可判断的响应。浏览器策略、证书、Wi-Fi 隔离或网络规则都可能影响探测。' :
+		checks.length ? '软路由只确认有 HTTPS 证书校验问题。使用 IP 时，证书可能与地址不匹配，无法据此判断本机是否被隔离。' :
+		web?.state === 'checked' ? '常见网页端口没有返回可用的对照结果。NAS 仍可能只提供文件共享，或使用其他端口。' :
+		'本轮没有软路由网页探测结果，暂时无法自动对照两侧路径。';
+	const clientLabels = {
+		response: ['passed', '本机有响应'],
+		timeout: ['skipped', '本机等待超时，原因待确认'], unclear: ['skipped', '本机未确认'],
+		permission: ['skipped', '本地网络权限显示为阻止']
+	};
+	const smb = service.tcp === 'open' ? '软路由 TCP 445 可连接' :
+		service.tcp === 'unavailable' ? '软路由未能执行 TCP 445 测试' : '软路由未连上 TCP 445';
+	return E('section', { class: 'srd-terminal', 'aria-labelledby': 'srd-terminal-title' }, [
+		E('h4', { class: 'srd-rank-title', id: 'srd-terminal-title' }, '当前手机或电脑 → NAS'),
+		E('div', { class: 'srd-website-result' }, [text('strong', title), text('p', explanation, 'srd-map-meta')]),
+		E('dl', { class: 'srd-website-steps srd-lan-details' }, [
+			...checks.map(check => E('div', {}, [
+				text('dt', check.scheme.toUpperCase() + ' ' + check.port),
+				E('dd', { class: 'srd-terminal-line' }, [
+					text('span', check.state === 'response' ? '软路由 HTTP ' + check.status : '软路由证书校验未通过'),
+					chip(...clientLabels[check.client]),
+					check.status >= 300 && check.status < 400 && check.client !== 'response' ?
+						text('span', '该入口返回跳转。本机仅检查已确认的 NAS 网页端口。', 'srd-map-meta') : ''
+				])
+			])),
+			E('div', {}, [text('dt', 'SMB 文件共享'), E('dd', { class: 'srd-terminal-line' }, [
+				text('span', smb), chip('skipped', '本机 SMB 待核对')
+			])])
+		]),
+		E('details', {}, [
+			text('summary', '用 IP 核对文件共享'),
+			E('p', {}, ['Windows 文件资源管理器地址栏输入 ', text('code', '\\\\' + target.address),
+				'。手机的 SMB 客户端或 macOS「连接服务器」输入 ', text('code', 'smb://' + target.address), '。']),
+			text('p', 'IP 能连而名称打不开，先查名称解析或服务发现。出现登录提示，说明已连到共享服务。登录后无法打开共享，请核对账户和共享权限。')
+		])
+	]);
+}
+
+function renderLanAccess(data, terminal = []) {
 	const { source, target, service } = data;
 	const endpoint = item => [item.address, item.interface, item.zone && '防火墙区 ' + item.zone, item.subnet]
 		.filter(Boolean).join(' · ') || '未取得';
@@ -1206,7 +1307,7 @@ function renderLanAccess(data) {
 		['当前连接', endpoint(source)],
 		['目标设备', endpoint(target)],
 		['设备响应', (target.icmp === 'reply' ? 'Ping 有应答' : 'Ping 无应答') + ' · ' + neighbor[target.neighbor]],
-		service.port && ['服务端口', 'TCP ' + service.port + ' ' + tcp[service.tcp]],
+		service.port && service.profile !== 'smb' && ['服务端口', 'TCP ' + service.port + ' ' + tcp[service.tcp]],
 		discovery[service.mdns] && ['自动发现', discovery[service.mdns]]
 	].filter(Boolean);
 	return [
@@ -1216,7 +1317,8 @@ function renderLanAccess(data) {
 		]),
 		E('dl', { class: 'srd-website-steps srd-lan-details' }, rows.map(([label, value]) =>
 			E('div', {}, [text('dt', label), text('dd', value)]))),
-		text('p', 'Ping 无应答或未看到通告时，设备仍可能在线。连接与服务发现结果以软路由侧为准。', 'srd-map-meta')
+		text('p', '上方的 Ping、ARP 和服务发现由软路由测得。', 'srd-map-meta'),
+		...(service.profile === 'smb' ? [renderTerminalAccess(data, terminal)] : [])
 	];
 }
 
@@ -1345,6 +1447,7 @@ return view.extend({
 				button('收起', () => { hideLan(); lanButton.focus(); })
 			]),
 			text('p', '手机找不到电视、打印机或 NAS 时，可以检查目标设备的网段、响应和服务发现。', 'srd-accel-copy'),
+			text('p', '排查 NAS 时，在连不上的手机或电脑上打开此页，并选择「NAS / SMB 文件共享」。', 'srd-map-meta'),
 			E('form', { class: 'srd-lan-form', submit: event => { event.preventDefault(); runLan(); } }, [
 				E('label', {}, ['目标设备', lanDevices]), lanManual, E('label', {}, ['要检查的服务', lanProfile]), lanSubmit
 			]),
@@ -1409,9 +1512,16 @@ return view.extend({
 			update();
 			try {
 				const peer = await readBrowserPeer().catch(() => '');
-				const data = await diagnoseLan(peer, target, lanProfile.value);
-				dom.content(lanContent, data?.target && data.service ? renderLanAccess(data) :
-					text('p', data?.detail || '本轮未取得检查结果。', 'srd-accel-copy'));
+				const profile = lanProfile.value;
+				const data = await diagnoseLan(peer, target, profile, profile === 'smb');
+				if (data?.target?.address !== target || !data.service) {
+					dom.content(lanContent, text('p', data?.detail || '本轮未取得检查结果。', 'srd-accel-copy'));
+					return;
+				}
+				if (data.web?.endpoints?.length)
+					dom.content(lanContent, text('p', '软路由检查完成，正在从本机浏览器对照 NAS 网页响应…', 'srd-accel-copy'));
+				const terminal = await checkTerminalWeb(target, data.web);
+				dom.content(lanContent, renderLanAccess(data, terminal));
 			} catch {
 				dom.content(lanContent, text('p', '暂时无法完成检查，请核对 LuCI 登录状态及拓扑查看权限。', 'srd-accel-copy'));
 			} finally {

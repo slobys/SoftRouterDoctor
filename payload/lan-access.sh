@@ -2,6 +2,7 @@
 # Scope active probes to one RFC1918 address directly attached to a known LAN.
 
 LAN_ACCESS_LOCK=/tmp/soft-router-doctor-lan-access.lock
+LAN_WEB_PORTS='http:80 http:5000 http:8080 https:443 https:5001 https:8443'
 
 lan_access_scope() {
 	local address="$1" device="$2"
@@ -98,8 +99,58 @@ lan_access_mdns() {
 	fi
 }
 
+lan_web_probe() {
+	local address="$1" device="$2" endpoint="$3" scheme port code=0 status
+	scheme=${endpoint%:*}
+	port=${endpoint#*:}
+	status=$(curl -q -4 -I -s --noproxy '*' --interface "if!$device" --proto '=http,https' \
+		--connect-timeout 2 --max-time 3 -o /dev/null -w '%{http_code}' \
+		"$scheme://$address:$port/" 2>/dev/null) || code=$?
+	case "$code:$status" in
+		0:[1-5][0-9][0-9]) printf 'response %s\n' "$status" ;;
+		51:*|60:*) printf 'certificate\n' ;;
+		7:*|28:*|35:*|52:*|55:*|56:*) printf 'no_response\n' ;;
+		*) printf 'unavailable\n' ;;
+	esac
+}
+
+lan_web_probes() {
+	local endpoint
+	command -v curl >/dev/null 2>&1 || return 0
+	for endpoint in $LAN_WEB_PORTS; do
+		lan_web_probe "$1" "$2" "$endpoint" > "$root/web-$endpoint" &
+	done
+	wait
+}
+
+lan_web_report() {
+	local endpoint state status web_state=unavailable
+	for endpoint in $LAN_WEB_PORTS; do
+		[ -s "$root/web-$endpoint" ] || continue
+		read -r state status < "$root/web-$endpoint"
+		case "$state" in response|certificate|no_response) web_state=checked; break ;; esac
+	done
+	json_add_object web
+	json_add_string state "$web_state"
+	json_add_array endpoints
+	for endpoint in $LAN_WEB_PORTS; do
+		[ -s "$root/web-$endpoint" ] || continue
+		read -r state status < "$root/web-$endpoint"
+		case "$state" in response|certificate) ;; *) continue ;; esac
+		json_add_object ''
+		json_add_string scheme "${endpoint%:*}"
+		json_add_int port "${endpoint#*:}"
+		json_add_string state "$state"
+		[ -z "$status" ] || json_add_int status "$status"
+		json_close_object
+	done
+	json_close_array
+	json_close_object
+}
+
 lan_access() (
 	local origin="$1" target="$2" profile="$3" port='' types='' root='' service neighbor icmp
+	local client_check="$4" web_job=''
 	local target_device target_scope target_network target_subnet target_zone
 	local source_device='' source_ip='' source_network='' source_subnet='' source_zone=''
 	local relation=unknown policy=unknown firewall_config mdns=untested
@@ -155,6 +206,10 @@ EOF
 		policy=$(lan_access_forwarding "$source_zone" "$target_zone")
 	fi
 
+	if [ "$profile" = smb ] && [ "$client_check" = true ]; then
+		lan_web_probes "$target" "$target_device" &
+		web_job=$!
+	fi
 	if timeout 3 ping -4 -I "$target_device" -c 1 -W 1 "$target" >/dev/null 2>&1; then
 		icmp=reply
 	else
@@ -195,5 +250,9 @@ EOF
 	while IFS= read -r service; do json_add_string '' "$service"; done < "$root/announcements"
 	json_close_array
 	json_close_object
+	if [ -n "$web_job" ]; then
+		wait "$web_job"
+		lan_web_report
+	fi
 	json_dump
 )

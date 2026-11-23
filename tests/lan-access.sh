@@ -41,16 +41,27 @@ case "${0##*/}:$*" in
 			echo '=;br-lan;IPv4;NAS;_smb._tcp;local;NAS.local;192.168.42.20;445;' ;;
 	'avahi-browse:-rptk _airplay._tcp') exit 124 ;;
 	'avahi-browse:-rptk _googlecast._tcp') exit 0 ;;
+	'curl:-q -4 -I -s --noproxy * --interface if!br-lan --proto =http,https --connect-timeout 2 --max-time 3 -o /dev/null -w %{http_code} '*)
+		for url; do :; done
+		printf 'web %s\n' "$url" >> "$SRD_LAN_TEST/probes"
+		[ ! -f "$SRD_LAN_TEST/bad-curl" ] || exit 45
+		[ ! -f "$SRD_LAN_TEST/no-web" ] || exit 7
+		case "$url" in
+			http://192.168.42.20:80/) printf 302 ;;
+			http://192.168.42.20:5000/) printf 200 ;;
+			https://192.168.42.20:443/) exit 60 ;;
+			*) exit 7 ;;
+		esac ;;
 	*) exit 1 ;;
 esac
 STUB
 chmod +x "$scratch/bin/stub"
-for cmd in ip ping ubus uci ucode avahi-browse; do ln -s stub "$scratch/bin/$cmd"; done
+for cmd in ip ping ubus uci ucode avahi-browse curl; do ln -s stub "$scratch/bin/$cmd"; done
 : > "$scratch/probes"
 
 run() { answer=$(sh "$scratch/doctor" lan-access "$@"); }
 expect() {
-	actual=$(printf '%s\n' "$answer" | jsonfilter -e "$1")
+	actual=$(printf '%s\n' "$answer" | jsonfilter -e "$1") || actual=''
 	[ "$actual" = "$2" ] || { printf '%s expected %s, got %s\n%s\n' "$1" "$2" "$actual" "$answer" >&2; exit 1; }
 }
 
@@ -62,6 +73,26 @@ expect '@.target.neighbor' cached
 expect '@.service.tcp' open
 expect '@.service.announcements[0]' _smb._tcp
 grep -qx 'tcp 192.168.42.20 445 br-lan' "$scratch/probes"
+if grep -q '^web ' "$scratch/probes"; then exit 1; fi
+
+run 192.168.42.10 192.168.42.20 smb true
+expect '@.web.state' checked
+expect '@.web.endpoints[0].status' 302
+expect '@.web.endpoints[1].port' 5000
+expect '@.web.endpoints[1].status' 200
+expect '@.web.endpoints[2].scheme' https
+expect '@.web.endpoints[2].state' certificate
+expect '@.web.endpoints[3].state' ''
+[ "$(grep -c '^web ' "$scratch/probes")" -eq 6 ]
+
+touch "$scratch/no-web"
+run 192.168.42.10 192.168.42.20 smb true
+expect '@.web.state' checked
+expect '@.web.endpoints[0].state' ''
+touch "$scratch/bad-curl"
+run 192.168.42.10 192.168.42.20 smb true
+expect '@.web.state' unavailable
+expect '@.web.endpoints[0].state' ''
 
 run 192.168.43.10 192.168.42.20 reach
 expect '@.relationship' cross_network
@@ -92,13 +123,13 @@ expect '@.service.mdns' unavailable
 grep -qx 'tcp 192.168.42.20 631 br-lan' "$scratch/probes"
 
 : > "$scratch/probes"
-run 192.168.42.10 192.168.99.9 smb
+run 192.168.42.10 192.168.99.9 smb true
 expect '@.state' outside
 run '' 192.168.42.255 smb
 expect '@.state' outside
 run '' 192.168.42.1 smb
 expect '@.state' outside
-run '' 8.8.8.8 smb
+run '' 8.8.8.8 smb true
 expect '@.state' rejected
 run '' 192.168.42.20 arbitrary-service
 expect '@.state' rejected
