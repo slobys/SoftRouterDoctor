@@ -10,6 +10,7 @@ BRANCH=codex%2Fpreview
 INSTALL_DIR=/usr/share/soft-router-doctor
 MARKER=$INSTALL_DIR/installed
 LOCK=/var/lock/soft-router-doctor-install
+MONITOR_INIT=/etc/init.d/soft-router-doctor-monitor
 
 fail() {
 	printf '安装器：%s\n' "$*" >&2
@@ -20,6 +21,8 @@ layout() {
 	cat <<'FILES'
 payload/doctor|/usr/sbin/soft-router-doctor|755
 payload/topology.sh|/usr/lib/soft-router-doctor-topology.sh|644
+payload/monitor.sh|/usr/lib/soft-router-doctor-monitor.sh|644
+payload/monitor.init|/etc/init.d/soft-router-doctor-monitor|755
 payload/rpc|/usr/libexec/rpcd/soft-router-doctor|755
 payload/acl.json|/usr/share/rpcd/acl.d/luci-app-soft-router-doctor.json|644
 payload/menu.json|/usr/share/luci/menu.d/luci-app-soft-router-doctor.json|644
@@ -72,8 +75,29 @@ refresh_luci() {
 	/etc/init.d/rpcd restart
 }
 
+monitor_running() {
+	ubus -S call service list '{"name":"soft-router-doctor-monitor"}' 2>/dev/null |
+		jsonfilter -e '@["soft-router-doctor-monitor"].instances.*.running' 2>/dev/null |
+		grep -qx true
+}
+
+remember_monitor() {
+	monitor_existed=0
+	monitor_enabled=0
+	monitor_started=0
+	if [ -x "$MONITOR_INIT" ]; then
+		monitor_existed=1
+		if "$MONITOR_INIT" enabled >/dev/null 2>&1; then monitor_enabled=1; fi
+		if monitor_running; then monitor_started=1; fi
+	fi
+}
+
 restore() {
 	restored=1
+	if [ -x "$MONITOR_INIT" ]; then
+		if monitor_running; then "$MONITOR_INIT" stop >/dev/null 2>&1 || restored=0; fi
+		"$MONITOR_INIT" disable >/dev/null 2>&1 || restored=0
+	fi
 	while IFS='|' read -r rel dest mode; do
 		if [ -f "$stage/backup/$rel" ]; then
 			place_file "$stage/backup/$rel" "$dest" || restored=0
@@ -87,6 +111,8 @@ restore() {
 		rm -f "$MARKER" || restored=0
 	fi
 	refresh_luci >/dev/null 2>&1 || restored=0
+	if [ "$monitor_enabled" -eq 1 ]; then "$MONITOR_INIT" enable >/dev/null 2>&1 || restored=0; fi
+	if [ "$monitor_started" -eq 1 ]; then "$MONITOR_INIT" start >/dev/null 2>&1 || restored=0; fi
 	[ "$restored" -eq 1 ]
 }
 
@@ -169,7 +195,7 @@ prepare_payload() {
 		local_hash=$(sha "$stage/SHA256SUMS") || fail '无法计算本地清单指纹。'
 		revision=local-$local_hash
 	fi
-	for program in payload/doctor payload/topology.sh payload/rpc install.sh; do
+	for program in payload/doctor payload/topology.sh payload/monitor.sh payload/monitor.init payload/rpc install.sh; do
 		sh -n "$stage/payload/$program" || fail "Shell 语法错误：$program"
 	done
 }
@@ -231,6 +257,7 @@ if [ -f "$MARKER" ]; then
 	cp -p "$MARKER" "$stage/old-marker" || fail '无法备份安装记录。'
 fi
 
+remember_monitor
 if [ "$uninstall" -eq 1 ]; then
 	if [ "$had_install" -eq 0 ]; then
 		echo '软路由检测未安装。'
@@ -238,6 +265,10 @@ if [ "$uninstall" -eq 1 ]; then
 	fi
 	backup_files
 	changed=1
+	if [ "$monitor_existed" -eq 1 ]; then
+		if [ "$monitor_started" -eq 1 ]; then "$MONITOR_INIT" stop || fail '无法停止网络记录服务。'; fi
+		"$MONITOR_INIT" disable || fail '无法取消网络记录服务自启。'
+	fi
 	while IFS='|' read -r rel dest mode; do
 		rm -f "$dest" || fail "卸载失败：$dest"
 	done < "$stage/layout"
@@ -263,6 +294,7 @@ mkdir -p "$INSTALL_DIR" || fail '无法创建安装目录。'
 printf '%s\n' "$revision" > "$stage/installed" || fail '无法暂存安装记录。'
 chmod 644 "$stage/installed" || fail '无法设置安装记录权限。'
 changed=1
+if [ "$monitor_started" -eq 1 ]; then "$MONITOR_INIT" stop || fail '无法停止旧网络记录服务。'; fi
 while IFS='|' read -r rel dest mode; do
 	mkdir -p "$(dirname "$dest")" || fail "无法建立目录：$dest"
 	place_file "$stage/payload/$rel" "$dest" || fail "无法安装：$dest"
@@ -279,6 +311,11 @@ for check in 1 2 3 4 5; do
 	sleep 1
 done
 [ "$ready" -eq 1 ] || fail '已写入文件，但 RPC 接口没有返回预期提交。'
+if [ "$monitor_existed" -eq 0 ]; then
+	"$MONITOR_INIT" enable && "$MONITOR_INIT" start || fail '无法启用网络记录服务。'
+elif [ "$monitor_started" -eq 1 ]; then
+	"$MONITOR_INIT" start || fail '无法恢复网络记录服务。'
+fi
 changed=0
 printf '软路由检测安装完成。提交 %s。\n' "$revision"
 echo '打开 LuCI 的「状态 → 软路由检测」。'

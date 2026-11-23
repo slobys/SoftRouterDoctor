@@ -2,9 +2,14 @@
 
 case "$1:$2" in
 	list:)
-		printf '%s\n' '{"status":{},"networkMap":{"peer":""},"savedTopology":{},"editTopology":{"action":"","revision":"","id":"","address":"","name":"","mode":""},"discoverRouters":{"listenOnly":true},"scan":{},"scanLocal":{},"repairDns":{"confirm":true},"accelerationPlan":{},"applyAcceleration":{"confirm":true,"token":""},"optimizeService":{"confirm":true,"service":"","token":"","stop":true,"disable":true}}' ;;
+		printf '%s\n' '{"status":{},"monitorStatus":{},"monitorSet":{"enabled":true},"networkMap":{"peer":""},"savedTopology":{},"editTopology":{"action":"","revision":"","id":"","address":"","name":"","mode":""},"discoverRouters":{"listenOnly":true},"scan":{},"scanLocal":{},"repairDns":{"confirm":true},"accelerationPlan":{},"applyAcceleration":{"confirm":true,"token":""},"optimizeService":{"confirm":true,"service":"","token":"","stop":true,"disable":true}}' ;;
 	call:status)
 		exec /usr/sbin/soft-router-doctor status ;;
+	call:monitorStatus)
+		exec /usr/sbin/soft-router-doctor monitor-status ;;
+	call:monitorSet)
+		enabled=$(jsonfilter -e '@.enabled' 2>/dev/null)
+		exec /usr/sbin/soft-router-doctor monitor-set "$enabled" ;;
 	call:networkMap)
 		peer=$(jsonfilter -e '@.peer' 2>/dev/null)
 		exec /usr/sbin/soft-router-doctor topology "$peer" ;;

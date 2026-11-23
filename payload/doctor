@@ -6,6 +6,7 @@ export PATH
 
 REVISION_FILE=/usr/share/soft-router-doctor/installed
 SAVED_TOPOLOGY_LIB=/usr/lib/soft-router-doctor-topology.sh
+MONITOR_LIB=/usr/lib/soft-router-doctor-monitor.sh
 REPAIR_LOCK=/var/lock/soft-router-doctor-repair
 APK_CACHE=/var/cache/apk
 APK_CUSTOM_CACHE=/etc/apk/cache
@@ -20,7 +21,7 @@ field() {
 }
 
 identity() {
-	json_add_string version '0.8.0-dev'
+	json_add_string version '0.9.0-dev'
 	IFS= read -r revision 2>/dev/null < "$REVISION_FILE" || revision=uninstalled
 	json_add_string revision "$revision"
 }
@@ -763,9 +764,9 @@ route_signature() {
 }
 
 service_https() {
-	local response
+	local response url="${2:-https://example.com/}"
 	response=$(curl -q "-$1" --noproxy '*' --proto '=https' --head --connect-timeout 2 \
-		--max-time 2 --output /dev/null --write-out '%{http_code}' https://example.com/ 2>/dev/null) || return 1
+		--max-time 2 --output /dev/null --write-out '%{http_code}' "$url" 2>/dev/null) || return 1
 	case "$response" in [1-5][0-9][0-9]) return 0 ;; *) return 1 ;; esac
 }
 
@@ -1343,6 +1344,7 @@ add_lan_segment() {
 		json_add_object ''
 		json_add_string name "$port"
 		json_add_string carrier "$(field "$(if_device_status "$port")" '@.carrier')"
+		[ ! -r "$MONITOR_LIB" ] || add_port_metrics "$port"
 		json_close_object
 	done
 	json_close_array
@@ -1394,6 +1396,12 @@ network_map() (
 	add_lldp_neighbors
 	add_local_wireless_modes
 	json_add_string wan_carrier "$(field "$(if_device_status "$wan_device")" '@.carrier')"
+	if [ -r "$MONITOR_LIB" ]; then
+		json_add_object wan_port
+		json_add_string name "$wan_device"
+		add_port_metrics "$wan_device"
+		json_close_object
+	fi
 	json_add_array outlets
 	route_outlet 4
 	route_outlet 6
@@ -1438,6 +1446,15 @@ if [ "$1" = accelerate ]; then
 fi
 
 case "$1" in
+	monitor|monitor-status|monitor-set)
+		[ -r "$MONITOR_LIB" ] || { repair_result unavailable '网络记录组件不可用。'; exit 1; }
+		. "$MONITOR_LIB"
+		case "$1" in
+			monitor) monitor_loop ;;
+			monitor-status) monitor_status ;;
+			monitor-set) monitor_set "$2" ;;
+		esac
+		exit ;;
 	saved-topology|edit-topology)
 		[ -r "$SAVED_TOPOLOGY_LIB" ] || { repair_result unavailable '接线图组件不可用。'; exit; }
 		. "$SAVED_TOPOLOGY_LIB"
@@ -1446,6 +1463,7 @@ case "$1" in
 esac
 
 if [ "$1" = topology ] && [ "$#" -le 2 ]; then
+	[ ! -r "$MONITOR_LIB" ] || . "$MONITOR_LIB"
 	network_map "$2"
 	exit
 fi

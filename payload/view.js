@@ -7,6 +7,8 @@
 'require poll';
 
 const networkMap = rpc.declare({ object: 'soft-router-doctor', method: 'networkMap', params: ['peer'], reject: true });
+const monitorStatus = rpc.declare({ object: 'soft-router-doctor', method: 'monitorStatus', reject: true });
+const monitorSet = rpc.declare({ object: 'soft-router-doctor', method: 'monitorSet', params: ['enabled'], reject: true });
 const savedTopology = rpc.declare({ object: 'soft-router-doctor', method: 'savedTopology', reject: true });
 const editTopology = rpc.declare({
 	object: 'soft-router-doctor', method: 'editTopology',
@@ -121,6 +123,8 @@ const styles = [
 	'.srd-saved{margin:2px 0 18px;padding-bottom:14px;border-bottom:1px solid var(--line)}.srd-saved-head{display:flex;justify-content:space-between;align-items:center;gap:8px 12px;flex-wrap:wrap}.srd-saved-head .srd-rank-title{margin:0}.srd-saved-controls{display:flex;align-items:center;flex-wrap:wrap;gap:6px}',
 	'.srd-root .srd-saved-list{list-style:none;margin:8px 0;padding:0}.srd-saved-list>li{display:flex;justify-content:space-between;align-items:center;gap:6px 12px;flex-wrap:wrap;border-top:1px solid var(--line);padding:7px 0}.srd-saved-list strong{overflow-wrap:anywhere}.srd-root .srd-saved-list .srd-button{min-height:40px;padding:6px 10px;font-size:.8rem}',
 	'.srd-saved-form{margin:10px 0;padding:10px 12px;background:var(--quiet);border-radius:8px}.srd-saved-fields{display:flex;flex-wrap:wrap;gap:8px 12px;margin:7px 0 10px}.srd-saved-fields label{display:grid;gap:4px;flex:1 1 150px;min-width:0;font-size:.82rem;color:var(--ink)}.srd-root .srd-saved-fields input,.srd-root .srd-saved-fields select{width:100%;box-sizing:border-box;min-height:40px;min-width:0;color:var(--ink);background:var(--paper);border:1px solid var(--line);border-radius:7px;padding:5px 8px}',
+	'.srd-record-card{margin-top:14px;border:1px solid var(--line);border-radius:12px;background:var(--paper);padding:14px 16px}.srd-record-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px 12px;margin-bottom:5px}.srd-root .srd-record-head .srd-section-title{flex:1 1 12rem;width:auto;min-width:0;margin:0}.srd-record-summary{margin-top:6px;overflow-wrap:anywhere}.srd-record-summary strong{font-size:.96rem}.srd-record-summary .srd-map-meta{margin-top:3px}',
+	'.srd-root .srd-record-items{list-style:none;margin:7px 0 12px;padding:0}.srd-record-items li{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:2px 12px;padding:7px 0;border-top:1px solid var(--line)}.srd-record-items strong{font-size:.85rem}.srd-record-timeline .srd-button{margin-bottom:4px}',
 	'.srd-path-evidence{margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}.srd-path-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:6px 0}.srd-root .srd-path-fact{font-size:.92rem;margin-top:8px}.srd-path-devices{list-style:none;padding:0;margin:4px 0 0}.srd-path-devices li{padding:8px 0;border-top:1px solid var(--line);overflow-wrap:anywhere}.srd-root .srd-path-actions p{margin:0}.srd-mode-label{display:inline-block;margin-inline-start:10px;font-size:.8rem;color:var(--accent);font-weight:600}',
 	'.srd-root .srd-pc-path{display:flex;flex-wrap:wrap;gap:8px;list-style:none;margin:10px 0;padding:0}.srd-pc-path li{display:grid;align-content:start;gap:3px;flex:1 1 136px;min-width:0;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:var(--quiet);overflow-wrap:anywhere}.srd-pc-path li[data-state=unknown]{border-style:dashed;background:transparent}.srd-pc-path strong{font-size:.84rem;color:var(--ink)}.srd-pc-path li span{font-size:.77rem;color:var(--muted)}',
 	'.srd-map-clients{margin:0;padding:0;list-style:none}.srd-map-clients li{display:flex;align-items:baseline;justify-content:space-between;gap:6px;padding:6px 0;border-top:1px solid var(--line)}.srd-map-clients li>div{min-width:0}.srd-map-clients strong{font-size:.87rem}',
@@ -166,11 +170,11 @@ function subgroups(checks) {
 	})).filter(group => group.checks.length);
 }
 
-function downloadReport(report) {
+function downloadReport(report, filename = 'soft-router-doctor.json') {
 	const url = URL.createObjectURL(new Blob([ JSON.stringify(report, null, 2) + '\n' ], {
 		type: 'application/json'
 	}));
-	const link = E('a', { 'href': url, 'download': 'soft-router-doctor.json' });
+	const link = E('a', { 'href': url, 'download': filename });
 	document.body.appendChild(link);
 	link.click();
 	link.remove();
@@ -418,6 +422,22 @@ function mapHealth(topology, report) {
 	return { active, outlet, dns, checks };
 }
 
+function linkSpeed(value) {
+	return value >= 1000 ? (value / 1000) + ' Gbps' : value + ' Mbps';
+}
+
+function portDetails(port) {
+	if (!port?.name) return '';
+	const details = [port.name];
+	if (port.carrier === 'false') details.push('无载波');
+	else if (port.speed_mbps > 0) {
+		details.push(linkSpeed(port.speed_mbps));
+		if (port.best_mbps > port.speed_mbps) details.push('速率低于曾测 ' + linkSpeed(port.best_mbps));
+	} else if (port.carrier === 'true') details.push('有载波');
+	if (port.drops_observed > 0) details.push('观察到掉链 ' + port.drops_observed + ' 次');
+	return details.join(' · ');
+}
+
 function renderMapSegment(segment, prefixCheck, open) {
 	let status = { state:'skipped', label:'接口状态未确认' };
 	if (segment.up === 'false' || segment.carrier === 'false')
@@ -430,12 +450,11 @@ function renderMapSegment(segment, prefixCheck, open) {
 		recent: ['passed','近期有响应'], known: ['skipped','有邻居记录'],
 		lease: ['skipped','仅有租约'], unresolved: ['warning','邻居解析未确认']
 	};
-	const portLine = segment.ports.map(port => port.name +
-		(port.carrier === 'false' ? '（无载波）' : port.carrier === 'true' ? '（有载波）' : '')).join(' · ');
+	const portLine = segment.ports.map(portDetails).filter(Boolean);
 	return E('article', { 'class': 'srd-map-node', 'data-state': status.state }, [
 		mapHeading(segment.id === 'lan' ? '家庭局域网' : segment.id, status.state, status.label),
 		text('p', [segment.device, segment.gateway].filter(Boolean).join(' · ') || '地址或设备尚未确认', 'srd-accel-copy'),
-		portLine ? text('p', '桥接端口：' + portLine, 'srd-map-meta') : '',
+		portLine.length ? E('div', {}, [text('p', '桥接端口', 'srd-map-meta'), ...portLine.map(line => text('p', line, 'srd-map-meta'))]) : '',
 		segment.id === 'lan' && prefixCheck?.state === 'warning' ? text('p', prefixCheck.detail, 'srd-map-meta') : '',
 		segment.clients.length ? E('details', { 'class': 'srd-evidence', 'data-segment': segment.id, 'open': open || null }, [
 			text('summary', '查看设备（' + segment.client_count + '）'),
@@ -469,6 +488,8 @@ function renderNetworkMap(map, report, checking, expanded = new Set()) {
 			E('article', { 'class': 'srd-map-node', 'data-state': outlet.state }, [
 				mapHeading('上游出口', outlet.state, outlet.label),
 				E('dl', { 'class': 'srd-map-outlets' }, outlets),
+				Number.isFinite(map.wan_port?.speed_mbps) ?
+					text('p', portDetails({ ...map.wan_port, carrier: map.wan_carrier }), 'srd-map-meta') : '',
 				map.wan_protocol === 'pppoe' && !bypass ? text('p', 'PPPoE 拨号' + (map.wan_device ? ' · ' + map.wan_device : ''), 'srd-map-meta') : '',
 				bypass ? text('p', '默认出口经过 LAN，可能是旁路由或单臂接入。', 'srd-map-meta') : '',
 				text('p', outlet.detail, 'srd-accel-copy')
@@ -780,6 +801,137 @@ function savedNetworkDiagram(canEdit) {
 	return { root, refresh, hasNodes: () => Boolean(snapshot?.nodes.length) };
 }
 
+const eventKinds = {
+	port_link: '网口链路', port_flap: '网口发生短时掉链', port_speed: '网口协商速率',
+	pppoe: 'PPPoE 会话', pppoe_reconnect: '观察到 PPPoE 重拨',
+	route4: 'IPv4 默认路由', route6: 'IPv6 默认路由', dns: 'DNS 样本解析',
+	web4: 'IPv4 HTTPS 样本', web6: 'IPv6 HTTPS 样本', monitor_gap: '网络记录已重新开始'
+};
+
+function eventTitle(event) {
+	const label = [event.port, eventKinds[event.kind]].filter(Boolean).join(' ');
+	if (event.kind === 'port_speed' && event.transition === 'started')
+		return event.port + ' 速率由 ' + linkSpeed(event.from) + ' 降至 ' + linkSpeed(event.to);
+	if (event.kind === 'port_speed' && event.transition === 'restored')
+		return event.port + ' 速率恢复至 ' + linkSpeed(event.to);
+	if (event.kind === 'port_flap') return label + ' ' + event.to + ' 次';
+	return label + (event.transition === 'started' ? '异常' : event.transition === 'restored' ? '恢复' : '');
+}
+
+function eventDuration(seconds) {
+	if (seconds < 60) return seconds + ' 秒';
+	if (seconds < 3600) return Math.floor(seconds / 60) + ' 分 ' + seconds % 60 + ' 秒';
+	return Math.floor(seconds / 3600) + ' 小时 ' + Math.floor(seconds / 60) % 60 + ' 分';
+}
+
+function eventTime(event) {
+	return new Date(event.time * 1000).toLocaleString('zh-CN', { hour12: false });
+}
+
+function incidentRecorder(canEdit) {
+	let state = null;
+	let reading = null;
+	let changing = false;
+	let unreadable = false;
+	let snapshotKey = '';
+	const status = E('p', { class: 'srd-map-meta', role: 'status' });
+	const header = E('div', { class: 'srd-record-summary' });
+	const timeline = E('div');
+	const note = E('p', { class: 'srd-map-meta', role: 'status', hidden: true });
+	const toggle = button('暂停记录', change);
+	toggle.hidden = true;
+	const card = E('section', { class: 'srd-record-card', 'aria-labelledby': 'srd-record-title' }, [
+		E('div', { class: 'srd-record-head' }, [
+			E('h3', { class: 'srd-section-title', id: 'srd-record-title' }, '网络异常回放'), toggle
+		]),
+		status, header, timeline, note
+	]);
+	status.textContent = '正在读取本次开机的网络记录。';
+
+	function draw() {
+		if (!state) {
+			if (unreadable) status.textContent = '暂时无法读取网络记录。';
+			return;
+		}
+		const recent = state.events.filter(item => Object.hasOwn(eventKinds, item.kind));
+		const active = new Map();
+		for (const item of recent) {
+			const key = item.kind + '/' + item.port;
+			if (item.kind === 'monitor_gap') active.clear();
+			else if (item.transition === 'started') active.set(key, item);
+			else if (item.transition === 'restored') active.delete(key);
+		}
+		const activeEvent = [...active.values()].sort((a, b) => b.time - a.time)[0];
+		const sorted = recent.slice().reverse().sort((a, b) => b.time - a.time);
+		const working = state.running && Number.isFinite(state.sample_age) && state.sample_age < 45;
+		const latest = (working && activeEvent) || sorted.find(item => item.kind !== 'monitor_gap');
+		status.textContent = unreadable ? '暂时无法刷新。以下是上次读取的记录。' :
+			working ? '记录中 · 本次开机' : state.running ? '等待采样 · 本次开机' :
+				state.enabled ? '服务未运行 · 本次开机记录可查看' : '记录已暂停 · 本次开机记录可查看';
+		if (canEdit) {
+			toggle.hidden = false;
+			toggle.textContent = state.running ? '暂停记录' : '启用记录';
+			toggle.disabled = changing;
+		}
+		dom.content(header, latest ? [
+			text('strong', eventTitle(latest)),
+			text('span', eventTime(latest) + (latest.transition === 'restored' ?
+				' · 样本异常约 ' + eventDuration(latest.duration) : latest === activeEvent && working ? ' · 等待复测恢复' : ''), 'srd-map-meta')
+		] : text('p', working ? '本次开机未记录到网络异常。' : '暂时没有网络异常记录。', 'srd-accel-copy'));
+		const wasOpen = timeline.querySelector('details')?.open;
+		dom.content(timeline, sorted.length ? E('details', { class: 'srd-record-timeline', open: wasOpen || null }, [
+			text('summary', '查看事件（' + sorted.length + '）'),
+			text('p', '记录来自软路由的接口状态和固定探测样本，时间为采样时间。', 'srd-map-meta'),
+			E('ol', { class: 'srd-record-items' }, sorted.map(item => E('li', {}, [
+				text('strong', eventTitle(item)), text('span', eventTime(item) +
+					(item.transition === 'restored' ? ' · 约 ' + eventDuration(item.duration) : ''), 'srd-map-meta')
+			]))),
+			button('导出事件', () => downloadReport({ events: sorted.map(({ time, kind, transition, duration, from, to }) =>
+				({ time, kind, transition, duration, from, to }))
+			}, 'soft-router-doctor-events.json'))
+		]) : []);
+	}
+
+	function refresh() {
+		if (reading) return reading;
+		reading = monitorStatus().then(next => {
+			if (!Array.isArray(next?.events)) throw new Error('invalid monitor response');
+			const key = JSON.stringify([next.running, next.enabled, next.sample_age < 45, next.events]);
+			state = next;
+			if (key !== snapshotKey || unreadable) {
+				snapshotKey = key;
+				unreadable = false;
+				draw();
+			}
+		}).catch(() => {
+			unreadable = true;
+			draw();
+		}).finally(() => { reading = null; });
+		return reading;
+	}
+
+	async function change() {
+		if (changing || !state) return;
+		changing = true;
+		toggle.disabled = true;
+		note.hidden = false;
+		note.textContent = '正在更新记录服务…';
+		try {
+			const result = await monitorSet(!state.running);
+			note.textContent = result?.detail || '未取得记录服务状态。';
+			if (reading) await reading;
+			await refresh();
+		} catch {
+			note.textContent = '无法更改记录状态，请核对写入权限。';
+		} finally {
+			changing = false;
+			toggle.disabled = false;
+		}
+	}
+
+	return { card, refresh };
+}
+
 function stageItems(states) {
 	const status = { ready: '待检查', running: '检查中', done: '完成', skipped: '未运行', failed: '未完成' };
 	return phases.map((phase, index) => E('li', { 'class': 'srd-step', 'data-state': states[index] }, [
@@ -815,6 +967,9 @@ return view.extend({
 		]);
 		const steps = E('ol', { 'class': 'srd-steps', 'aria-label': '体检步骤' }, stageItems(progress));
 		const notice = E('p', { 'class': 'srd-notice', 'role': 'status', 'hidden': true });
+		const recorder = incidentRecorder(L.hasViewPermission());
+		poll.add(recorder.refresh, 15);
+		recorder.refresh();
 		const results = E('div');
 		const primary = button('开始体检', () => runScan(false), true);
 		const local = button('只查本机', () => runScan(true));
@@ -1134,7 +1289,7 @@ return view.extend({
 				]),
 				dial
 			]),
-			steps, live, notice, mapPanel, speedPanel, results
+			steps, live, notice, recorder.card, mapPanel, speedPanel, results
 		]);
 	}
 });
