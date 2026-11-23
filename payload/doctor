@@ -9,6 +9,7 @@ SAVED_TOPOLOGY_LIB=/usr/lib/soft-router-doctor-topology.sh
 MONITOR_LIB=/usr/lib/soft-router-doctor-monitor.sh
 QUALITY_LIB=/usr/lib/soft-router-doctor-quality.sh
 SITE_LIB=/usr/lib/soft-router-doctor-site.sh
+LAN_ACCESS_LIB=/usr/lib/soft-router-doctor-lan-access.sh
 REPAIR_LOCK=/var/lock/soft-router-doctor-repair
 APK_CACHE=/var/cache/apk
 APK_CUSTOM_CACHE=/etc/apk/cache
@@ -23,7 +24,7 @@ field() {
 }
 
 identity() {
-	json_add_string version '0.11.0-dev'
+	json_add_string version '0.12.0-dev'
 	IFS= read -r revision 2>/dev/null < "$REVISION_FILE" || revision=uninstalled
 	json_add_string revision "$revision"
 }
@@ -1448,6 +1449,13 @@ if [ "$1" = accelerate ]; then
 fi
 
 case "$1" in
+	lan-access)
+		[ -r "$SAVED_TOPOLOGY_LIB" ] && [ -r "$LAN_ACCESS_LIB" ] ||
+			{ repair_result unavailable '设备互访组件不可用。'; exit; }
+		. "$SAVED_TOPOLOGY_LIB"
+		. "$LAN_ACCESS_LIB"
+		lan_access "$2" "$3" "$4"
+		exit ;;
 	site)
 		[ -r "$SITE_LIB" ] || { repair_result unavailable '网站诊断组件不可用。'; exit 1; }
 		[ ! -r "$QUALITY_LIB" ] || . "$QUALITY_LIB"

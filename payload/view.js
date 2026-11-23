@@ -9,6 +9,7 @@
 const networkMap = rpc.declare({ object: 'soft-router-doctor', method: 'networkMap', params: ['peer'], reject: true });
 const measureQuality = rpc.declare({ object: 'soft-router-doctor', method: 'quality', reject: true });
 const diagnoseWebsite = rpc.declare({ object: 'soft-router-doctor', method: 'diagnoseSite', params: ['host'], reject: true });
+const diagnoseLan = rpc.declare({ object: 'soft-router-doctor', method: 'lanAccess', params: ['peer', 'target', 'profile'], reject: true });
 const monitorStatus = rpc.declare({ object: 'soft-router-doctor', method: 'monitorStatus', reject: true });
 const monitorSet = rpc.declare({ object: 'soft-router-doctor', method: 'monitorSet', params: ['enabled'], reject: true });
 const savedTopology = rpc.declare({ object: 'soft-router-doctor', method: 'savedTopology', reject: true });
@@ -131,6 +132,7 @@ const styles = [
 	'.srd-root .srd-quality-paths{list-style:none;margin:10px 0;padding:0}.srd-quality-paths li{border-top:1px solid var(--line);padding:9px 0;overflow-wrap:anywhere}.srd-quality-path-head{display:flex;align-items:center;flex-wrap:wrap;gap:4px 9px}.srd-quality-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,108px),1fr));gap:5px 10px;margin:6px 0 0}.srd-quality-stats dt{color:var(--muted);font-size:.76rem}.srd-quality-stats dd{margin:0;font-size:.85rem;font-weight:660;font-variant-numeric:tabular-nums}',
 	'.srd-website-form{margin:9px 0 12px}.srd-website-form label{font-size:.85rem;font-weight:650}.srd-website-input{display:flex;flex-wrap:wrap;gap:6px 8px;margin:5px 0}.srd-root .srd-website-input input{flex:1 1 230px;min-width:0;min-height:44px;max-width:100%;border:1px solid var(--line);border-radius:8px;padding:7px 10px;color:var(--ink);background:var(--paper)}.srd-root .srd-website-input input::placeholder{color:var(--muted)}.srd-root .srd-website-input input[aria-invalid=true]{border-color:var(--bad)}.srd-root .srd-website-input input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}',
 	'.srd-website-result{padding:9px 11px;background:var(--quiet);border-radius:7px;overflow-wrap:anywhere}.srd-website-families{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:10px 22px;margin-top:12px}.srd-website-families section{min-width:0}.srd-website-families section>p{overflow-wrap:anywhere}.srd-website-steps{margin:5px 0 0}.srd-website-steps>div{display:grid;grid-template-columns:minmax(80px,.8fr) minmax(0,2fr);gap:4px 10px;padding:7px 0;border-top:1px solid var(--line)}.srd-website-steps dt{font-size:.83rem;color:var(--ink)}.srd-website-steps dd{margin:0;min-width:0}.srd-website-steps .srd-chip{white-space:normal;overflow-wrap:anywhere}',
+	'.srd-lan-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));gap:8px;margin:10px 0}.srd-lan-form label{display:grid;gap:4px;min-width:0;font-size:.85rem;font-weight:650}.srd-root .srd-lan-form :is(select,input){width:100%;max-width:100%;min-width:0;min-height:44px;border:1px solid var(--line);border-radius:8px;padding:7px 9px;background-color:var(--paper);color:var(--ink)}.srd-root .srd-lan-form :is(select,input):focus-visible{outline:2px solid var(--accent);outline-offset:1px}.srd-root .srd-lan-form input[aria-invalid=true]{border-color:var(--bad)}.srd-lan-form .srd-primary{align-self:end;justify-self:start}.srd-lan-details dd{overflow-wrap:anywhere;color:var(--ink)}',
 	'.srd-path-evidence{margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}.srd-path-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:6px 0}.srd-root .srd-path-fact{font-size:.92rem;margin-top:8px}.srd-path-devices{list-style:none;padding:0;margin:4px 0 0}.srd-path-devices li{padding:8px 0;border-top:1px solid var(--line);overflow-wrap:anywhere}.srd-root .srd-path-actions p{margin:0}.srd-mode-label{display:inline-block;margin-inline-start:10px;font-size:.8rem;color:var(--accent);font-weight:600}',
 	'.srd-root .srd-pc-path{display:flex;flex-wrap:wrap;gap:8px;list-style:none;margin:10px 0;padding:0}.srd-pc-path li{display:grid;align-content:start;gap:3px;flex:1 1 136px;min-width:0;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:var(--quiet);overflow-wrap:anywhere}.srd-pc-path li[data-state=unknown]{border-style:dashed;background:transparent}.srd-pc-path strong{font-size:.84rem;color:var(--ink)}.srd-pc-path li span{font-size:.77rem;color:var(--muted)}',
 	'.srd-map-clients{margin:0;padding:0;list-style:none}.srd-map-clients li{display:flex;align-items:baseline;justify-content:space-between;gap:6px;padding:6px 0;border-top:1px solid var(--line)}.srd-map-clients li>div{min-width:0}.srd-map-clients strong{font-size:.87rem}',
@@ -1151,6 +1153,73 @@ function renderWebsite(report) {
 	];
 }
 
+const lanProfiles = {
+	reach: '设备响应',
+	smb: 'NAS / SMB 文件共享',
+	print: '网络打印 / AirPrint',
+	cast: 'AirPlay / Chromecast 投屏'
+};
+const lanAnnouncements = { '_smb._tcp': 'SMB', '_ipp._tcp': 'IPP', '_ipps._tcp': 'IPPS',
+	'_airplay._tcp': 'AirPlay', '_googlecast._tcp': 'Chromecast' };
+
+function privateIPv4(value) {
+	const parts = (value || '').split('.');
+	if (parts.length !== 4 || parts.some(part => !/^(0|[1-9][0-9]{0,2})$/.test(part) || +part > 255)) return false;
+	const [first, second] = parts.map(Number);
+	return first === 10 || (first === 192 && second === 168) || (first === 172 && second >= 16 && second <= 31);
+}
+
+function lanSummary(data) {
+	const { target, service } = data;
+	if (data.relationship === 'cross_network')
+		return '当前连接和目标设备位于不同网段';
+	if (service.tcp === 'open') return '软路由可以连接目标设备的服务端口';
+	if (service.tcp === 'refused') return '目标的 TCP 连接被拒绝';
+	if (service.tcp === 'timeout' || service.tcp === 'failed') return '软路由未能连通目标的服务端口';
+	if (service.mdns === 'observed') return '软路由看到了目标设备的服务通告';
+	if (target.icmp === 'reply') return '目标设备回应了软路由';
+	return '本轮未收到目标设备的 Ping 应答';
+}
+
+function renderLanAccess(data) {
+	const { source, target, service } = data;
+	const endpoint = item => [item.address, item.interface, item.zone && '防火墙区 ' + item.zone, item.subnet]
+		.filter(Boolean).join(' · ') || '未取得';
+	const relationship = {
+		same_link: '同一局域网接口，仍可能受 Wi-Fi 或交换机隔离影响。',
+		cross_network: {
+			configured: '配置中有此方向的通用跨区转发。具体规则仍可能限制连接，mDNS 跨网段也需要额外配置。',
+			no_zone_forwarding: '未找到此方向的通用跨区转发。单独的防火墙规则仍可能放行，mDNS 跨网段也需要额外配置。',
+			same_zone: '两个网段在同一防火墙区。请核对区内转发策略和 mDNS 跨网段配置。',
+			unknown: '未能确定防火墙区的对应关系。请核对来源网段、目标网段及 mDNS 配置。'
+		}[data.forwarding],
+		unknown: '未能确认浏览器所属的局域网接口。目标检查仍从软路由发起。'
+	}[data.relationship];
+	const tcp = { open: '可连接', refused: '被拒绝', timeout: '连接超时', failed: '连接失败', unavailable: '未验证' };
+	const announcements = service.announcements.map(item => lanAnnouncements[item]).filter(Boolean);
+	const discovery = { observed: '看到 ' + announcements.join('、') + ' mDNS 通告',
+		not_seen: '本轮未看到目标的 mDNS 通告',
+		incomplete: 'mDNS 检查未完成',
+		unavailable: '当前固件的 Avahi 发现工具不可用' };
+	const neighbor = { reachable: 'ARP 邻居可达', cached: '发现 ARP 缓存', unseen: '未取得有效 ARP 邻居记录' };
+	const rows = [
+		['当前连接', endpoint(source)],
+		['目标设备', endpoint(target)],
+		['设备响应', (target.icmp === 'reply' ? 'Ping 有应答' : 'Ping 无应答') + ' · ' + neighbor[target.neighbor]],
+		service.port && ['服务端口', 'TCP ' + service.port + ' ' + tcp[service.tcp]],
+		discovery[service.mdns] && ['自动发现', discovery[service.mdns]]
+	].filter(Boolean);
+	return [
+		E('div', { class: 'srd-website-result' }, [
+			text('strong', lanSummary(data)),
+			text('p', relationship, 'srd-map-meta')
+		]),
+		E('dl', { class: 'srd-website-steps srd-lan-details' }, rows.map(([label, value]) =>
+			E('div', {}, [text('dt', label), text('dd', value)]))),
+		text('p', 'Ping 无应答或未看到通告时，设备仍可能在线。连接与服务发现结果以软路由侧为准。', 'srd-map-meta')
+	];
+}
+
 function stageItems(states) {
 	const status = { ready: '待检查', running: '检查中', done: '完成', skipped: '未运行', failed: '未完成' };
 	return phases.map((phase, index) => E('li', { 'class': 'srd-step', 'data-state': states[index] }, [
@@ -1176,6 +1245,7 @@ return view.extend({
 		let mapping = false;
 		let measuringQuality = false;
 		let checkingWebsite = false;
+		let checkingLan = false;
 		let repairInFlight = false;
 		let progress = ['ready', 'ready'];
 		const live = E('div', { 'class': 'srd-sr', 'role': 'status', 'aria-live': 'polite' });
@@ -1199,6 +1269,9 @@ return view.extend({
 		const mapButton = button('网络拓扑', () => runTopology());
 		const qualityButton = button('卡顿诊断', runQuality);
 		const websiteButton = button('网站诊断', openWebsite);
+		const lanButton = button('设备互访', openLan);
+		lanButton.setAttribute('aria-controls', 'srd-lan-access');
+		lanButton.setAttribute('aria-expanded', 'false');
 		websiteButton.setAttribute('aria-controls', 'srd-website');
 		websiteButton.setAttribute('aria-expanded', 'false');
 		qualityButton.setAttribute('aria-controls', 'srd-quality');
@@ -1253,6 +1326,99 @@ return view.extend({
 			]),
 			websiteContent
 		]);
+		const lanDevices = E('select', { change: () => {
+			lanManual.hidden = Boolean(lanDevices.value);
+			dom.content(lanContent, []);
+		} }, [E('option', { value: '' }, '手动输入 IPv4 地址')]);
+		const lanInput = E('input', { type: 'text', inputmode: 'decimal', maxlength: 15,
+			autocomplete: 'off', spellcheck: 'false', placeholder: '例如 192.168.1.50' });
+		const lanManual = E('label', {}, ['设备 IPv4 地址', lanInput]);
+		const lanProfile = E('select', { change: () => dom.content(lanContent, []) },
+			Object.entries(lanProfiles).map(([id, label]) => E('option', { value: id }, label)));
+		const lanSubmit = E('button', { type: 'submit', class: 'srd-primary' }, '检查设备');
+		const lanInventory = E('p', { class: 'srd-map-meta', role: 'status' });
+		const lanContent = E('div', { 'aria-live': 'polite' });
+		const lanPanel = E('section', { class: 'srd-accel', id: 'srd-lan-access', hidden: true,
+			'aria-labelledby': 'srd-lan-title' }, [
+			E('div', { class: 'srd-quality-header' }, [
+				E('h3', { class: 'srd-section-title', id: 'srd-lan-title' }, '设备互访'),
+				button('收起', () => { hideLan(); lanButton.focus(); })
+			]),
+			text('p', '手机找不到电视、打印机或 NAS 时，可以检查目标设备的网段、响应和服务发现。', 'srd-accel-copy'),
+			E('form', { class: 'srd-lan-form', submit: event => { event.preventDefault(); runLan(); } }, [
+				E('label', {}, ['目标设备', lanDevices]), lanManual, E('label', {}, ['要检查的服务', lanProfile]), lanSubmit
+			]),
+			lanInventory,
+			lanContent
+		]);
+		let readingLanDevices = false;
+
+		function hideLan() {
+			lanPanel.hidden = true;
+			lanButton.setAttribute('aria-expanded', 'false');
+		}
+
+		async function openLan() {
+			if (checkingLan || checkingWebsite || measuringQuality || busy || accelerating || mapping) return;
+			lanPanel.hidden = false;
+			lanButton.setAttribute('aria-expanded', 'true');
+			hideWebsite();
+			hideQuality();
+			speedPanel.hidden = mapPanel.hidden = true;
+			speedButton.setAttribute('aria-expanded', 'false');
+			mapButton.setAttribute('aria-expanded', 'false');
+			lanDevices.focus();
+			if (readingLanDevices) return;
+			readingLanDevices = true;
+			lanInventory.textContent = '正在读取已知设备…';
+			try {
+				const [map, saved] = await Promise.all([networkMap('').catch(() => null), savedTopology().catch(() => null)]);
+				const devices = new Map();
+				for (const segment of map?.segments || [])
+					for (const item of segment.clients || [])
+						if (privateIPv4(item.address)) devices.set(item.address, item.host);
+				for (const item of saved?.nodes || [])
+					if (privateIPv4(item.address)) devices.set(item.address, item.name);
+				const selected = lanDevices.value;
+				const options = [E('option', { value: '' }, '手动输入 IPv4 地址')];
+				for (const [address, name] of devices)
+					options.push(E('option', { value: address }, name ? name + ' · ' + address : address));
+				dom.content(lanDevices, options);
+				if (devices.has(selected)) lanDevices.value = selected;
+				lanManual.hidden = Boolean(lanDevices.value);
+				lanInventory.textContent = devices.size || checkingLan || lanContent.childNodes.length ? '' :
+					'暂时没有可选的设备，可手动输入目标地址。';
+			} finally {
+				readingLanDevices = false;
+			}
+		}
+
+		async function runLan() {
+			if (checkingLan || checkingWebsite || measuringQuality || busy || accelerating || mapping) return;
+			const target = lanDevices.value || lanInput.value.trim();
+			const valid = privateIPv4(target);
+			lanInput.setAttribute('aria-invalid', valid ? 'false' : 'true');
+			if (!valid) {
+				dom.content(lanContent, text('p', '请输入家庭设备的私有 IPv4 地址。', 'srd-accel-copy'));
+				lanInput.focus();
+				return;
+			}
+			checkingLan = true;
+			lanInventory.textContent = '';
+			dom.content(lanContent, text('p', '正在核对所在网段和所选服务…', 'srd-accel-copy'));
+			update();
+			try {
+				const peer = await readBrowserPeer().catch(() => '');
+				const data = await diagnoseLan(peer, target, lanProfile.value);
+				dom.content(lanContent, data?.target && data.service ? renderLanAccess(data) :
+					text('p', data?.detail || '本轮未取得检查结果。', 'srd-accel-copy'));
+			} catch {
+				dom.content(lanContent, text('p', '暂时无法完成检查，请核对 LuCI 登录状态及拓扑查看权限。', 'srd-accel-copy'));
+			} finally {
+				checkingLan = false;
+				update();
+			}
+		}
 
 		function hideWebsite() {
 			websitePanel.hidden = true;
@@ -1260,7 +1426,8 @@ return view.extend({
 		}
 
 		function openWebsite() {
-			if (checkingWebsite || measuringQuality || busy || accelerating || mapping) return;
+			if (checkingLan || checkingWebsite || measuringQuality || busy || accelerating || mapping) return;
+			hideLan();
 			websitePanel.hidden = false;
 			websiteButton.setAttribute('aria-expanded', 'true');
 			hideQuality();
@@ -1271,7 +1438,7 @@ return view.extend({
 		}
 
 		async function runWebsite() {
-			if (checkingWebsite || measuringQuality || busy || accelerating || mapping) return;
+			if (checkingLan || checkingWebsite || measuringQuality || busy || accelerating || mapping) return;
 			const host = websiteHost(websiteInput.value);
 			websiteInput.setAttribute('aria-invalid', host ? 'false' : 'true');
 			if (!host) {
@@ -1300,7 +1467,8 @@ return view.extend({
 		}
 
 		async function runQuality() {
-			if (measuringQuality || checkingWebsite || busy || accelerating || mapping) return;
+			if (checkingLan || measuringQuality || checkingWebsite || busy || accelerating || mapping) return;
+			hideLan();
 			hideWebsite();
 			measuringQuality = true;
 			qualityPanel.hidden = false;
@@ -1360,7 +1528,8 @@ return view.extend({
 		}
 
 		async function runTopology() {
-			if (busy || accelerating || mapping || measuringQuality || checkingWebsite) return;
+			if (busy || accelerating || mapping || measuringQuality || checkingWebsite || checkingLan) return;
+			hideLan();
 			hideWebsite();
 			mapping = true;
 			hideQuality();
@@ -1432,7 +1601,8 @@ return view.extend({
 		}
 
 		async function runAcceleration(plan, items = []) {
-			if (busy || accelerating || mapping || measuringQuality || checkingWebsite) return;
+			if (busy || accelerating || mapping || measuringQuality || checkingWebsite || checkingLan) return;
+			hideLan();
 			hideWebsite();
 			hideQuality();
 			accelerating = true;
@@ -1491,7 +1661,9 @@ return view.extend({
 			primary.textContent = busy ? (repairInFlight ? '正在修复' : '体检中') : report ? '重新体检' : '开始体检';
 			primary.disabled = local.disabled = speedButton.disabled = mapButton.disabled =
 				qualityButton.disabled = qualityAgain.disabled = websiteButton.disabled = websiteSubmit.disabled =
-					busy || accelerating || mapping || measuringQuality || checkingWebsite;
+					lanButton.disabled = lanSubmit.disabled =
+					busy || accelerating || mapping || measuringQuality || checkingWebsite || checkingLan;
+			lanDevices.disabled = lanInput.disabled = lanProfile.disabled = checkingLan;
 			websiteInput.disabled = checkingWebsite;
 			discoverButton.disabled = busy || accelerating || mapping;
 			exportButton.disabled = busy || accelerating || mapping || !report;
@@ -1524,7 +1696,7 @@ return view.extend({
 			}
 
 			if (report) {
-				const fix = !busy && !accelerating && !mapping && report.can_start_dnsmasq && L.hasViewPermission() ? showConfirmation : null;
+				const fix = !busy && !accelerating && !mapping && !checkingLan && report.can_start_dnsmasq && L.hasViewPermission() ? showConfirmation : null;
 				dom.content(results, renderReport(report, fix));
 			}
 		}
@@ -1537,7 +1709,8 @@ return view.extend({
 		}
 
 		async function runScan(localOnly, keepNotice) {
-			if (busy || accelerating || mapping || measuringQuality || checkingWebsite) return;
+			if (busy || accelerating || mapping || measuringQuality || checkingWebsite || checkingLan) return;
+			hideLan();
 			hideWebsite();
 			hideQuality();
 			busy = true;
@@ -1576,7 +1749,7 @@ return view.extend({
 		}
 
 		function showConfirmation() {
-			if (busy || accelerating || mapping || measuringQuality) return;
+			if (busy || accelerating || mapping || measuringQuality || checkingLan) return;
 			ui.showModal('启动 dnsmasq 并复测', [
 				text('p', '启动会使用路由器现有的 DNS 和 DHCP 配置。继续前，请确认这台设备负责对应服务。'),
 				E('div', { 'class': 'right' }, [
@@ -1589,7 +1762,7 @@ return view.extend({
 
 		async function runRepair() {
 			ui.hideModal();
-			if (busy || accelerating || mapping || measuringQuality) return;
+			if (busy || accelerating || mapping || measuringQuality || checkingLan) return;
 			const localOnly = report.mode === 'local';
 			busy = repairInFlight = true;
 			summary.textContent = '正在启动 DNS 服务并验证实际解析。';
@@ -1619,12 +1792,12 @@ return view.extend({
 					E('div', { 'class': 'srd-hero-intro' }, [
 						E('h2', { 'class': 'srd-title', 'id': 'srd-page-title' }, '软路由体检'), summary
 					]),
-					E('div', { 'class': 'srd-actions' }, [ primary, local, mapButton, qualityButton, websiteButton, speedButton, exportButton ]),
+					E('div', { 'class': 'srd-actions' }, [ primary, local, mapButton, lanButton, qualityButton, websiteButton, speedButton, exportButton ]),
 					meta
 				]),
 				dial
 			]),
-			steps, live, notice, websitePanel, qualityPanel, recorder.card, mapPanel, speedPanel, results
+			steps, live, notice, lanPanel, websitePanel, qualityPanel, recorder.card, mapPanel, speedPanel, results
 		]);
 	}
 });

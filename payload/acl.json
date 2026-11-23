@@ -16,7 +16,7 @@
     "description": "View local network topology and edit saved route devices with separate write access.",
     "read": {
       "ubus": {
-        "soft-router-doctor": ["networkMap", "discoverRouters", "savedTopology"]
+        "soft-router-doctor": ["networkMap", "discoverRouters", "savedTopology", "lanAccess"]
       }
     },
     "write": {

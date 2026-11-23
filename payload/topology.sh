@@ -24,7 +24,7 @@ saved_lan_scopes() {
 		valid_interface_name "$device" || continue
 		address=$(field "$info" '@["ipv4-address"][0].address')
 		mask=$(field "$info" '@["ipv4-address"][0].mask')
-		[ -n "$address" ] && [ -n "$mask" ] && printf '%s %s %s\n' "$device" "$address" "$mask"
+		[ -n "$address" ] && [ -n "$mask" ] && printf '%s %s %s %s\n' "$device" "$address" "$mask" "$iface"
 	done
 }
 
