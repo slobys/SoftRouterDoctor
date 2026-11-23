@@ -1,5 +1,13 @@
 # 预览版验证记录
 
+## v0.9 网络异常回放与网口速率
+
+2026-11-23，在 NanoPi R4S 的 iStoreOS 25.12.6 和 Argon 上验证提交 `afd1cea52a07c849758bf5abd5d9a1e825178eb9`。实际观察到 procd 记录服务持续产生采样，`eth0` 和 `eth1` 均读到 1000 Mbps。安装及升级前后 network、firewall、dhcp 配置摘要一致。
+
+- R4S 上运行 `tests/monitor.sh`，覆盖从 1000 降到 100 Mbps、协商速率恢复、两次采样之间的掉链、PPPoE 重新建立、DNS/HTTPS 样本异常、IPv4-only 环境、恢复时长和 96 条保留上限。故障由隔离数据模拟，家中网络未被断开。
+- 在真实 LuCI 验证实时采样状态、模拟事件的回放与恢复时长、拓扑降速和掉链提示、桌面与 390 像素布局、事件脱敏下载及独立写权限。
+- 在实机验证暂停、同版安装保留暂停状态、启用后恢复采样，以及升级保留服务自启。继续运行 `tests/topology.sh`、`tests/router-discovery.sh`、`tests/saved-topology.sh` 和 `tests/service-optimization.sh`，结果通过。
+
 ## v0.8 可编辑接线图与 IP 同步
 
 在 NanoPi R4S 的 iStoreOS 25.12.6 和 Argon 上验证提交 `ab0f906819ea7a5fa49d7564e7f11c1920692554`。用两台实际 TP-Link 的管理地址在隔离文件中录入，确认绑定到两个不同的 MAC。正式接线图未写入测试节点，升级前后的 network、firewall、dhcp 配置摘要一致。
