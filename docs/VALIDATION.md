@@ -1,5 +1,12 @@
 # 预览版验证记录
 
+## v0.11 指定网站诊断
+
+2026-11-23，在 NanoPi R4S 的 iStoreOS 25.12.6 和 Argon 上验证提交 `3b86e2fb08a9d756840d1416d3cca57ec93b575e`。在 R4S 上查询并访问 `example.com`，IPv4 和 IPv6 均返回 HTTP 200。`ipv4.icanhazip.com` 的 IPv4 可用，IPv6 显示未发布 AAAA。保留后缀 `.invalid` 返回 NXDOMAIN，过期证书测试站点的 IPv4 建立了 TCP 连接，TLS 证书校验失败。
+
+- 实机运行 `tests/site.sh`，覆盖 DNS 超时、SERVFAIL、无记录、TCP 超时、TLS 超时与证书失败、HTTPS 无响应、HTTP 403 和重定向，同时校验固定解析地址、公网出口和私有地址排除。`tests/quality.sh` 继续通过。
+- 在实际 LuCI 核对完整网址仅提交域名、非标准端口与直接局域网 IP 的输入校验、诊断权限、双栈结果和 390 像素布局。用模拟结果检查 IPv4 成功而 IPv6 证书失败时的摘要。安装前后 network、firewall、dhcp 配置摘要一致。
+
 ## v0.10 卡顿诊断与轻载参考
 
 2026-11-23，在 NanoPi R4S 的 iStoreOS 25.12.6 和 Argon 上验证提交 `4c2bccaa51a6a1ba396b10d7a5ab958e394175bc`。R4S 实际通过 `pppoe-wan` 取得四个固定 IPv4/IPv6 目标的回包、往返时间和接口流量。IPv6 使用源地址路由查询，四个目标都已建立轻载参考。安装前后 network、firewall、dhcp 配置摘要一致。
