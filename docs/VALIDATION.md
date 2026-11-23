@@ -1,5 +1,12 @@
 # 预览版验证记录
 
+## v0.10 卡顿诊断与轻载参考
+
+2026-11-23，在 NanoPi R4S 的 iStoreOS 25.12.6 和 Argon 上验证提交 `4c2bccaa51a6a1ba396b10d7a5ab958e394175bc`。R4S 实际通过 `pppoe-wan` 取得四个固定 IPv4/IPv6 目标的回包、往返时间和接口流量。IPv6 使用源地址路由查询，四个目标都已建立轻载参考。安装前后 network、firewall、dhcp 配置摘要一致。
+
+- `tests/quality.sh` 验证了 IPv4 出口和依赖源地址的 IPv6 出口、重复回包排除、字节计数回退时忽略速率、参考过期与路由隔离、流量方向及丢包判定。`tests/monitor.sh` 继续通过。
+- 在实际 LuCI 里验证一键采样、同源四次 HTTP HEAD 管理连接采样、390 像素布局和诊断权限。上行流量伴随延迟升高、丢包、无回应及测试中出口切换用模拟结果验证。未主动占满家庭带宽或切换实际出口。
+
 ## v0.9 网络异常回放与网口速率
 
 2026-11-23，在 NanoPi R4S 的 iStoreOS 25.12.6 和 Argon 上验证提交 `afd1cea52a07c849758bf5abd5d9a1e825178eb9`。实际观察到 procd 记录服务持续产生采样，`eth0` 和 `eth1` 均读到 1000 Mbps。安装及升级前后 network、firewall、dhcp 配置摘要一致。
