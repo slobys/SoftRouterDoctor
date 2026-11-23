@@ -1,5 +1,12 @@
 # 预览版验证记录
 
+## v0.15 局域网 DNS 路径诊断
+
+2026-11-23，在 NanoPi R4S 的 iStoreOS 25.12.6 和 Argon 上安装并验证提交 `52d35fd53bd85b37c260024ec31f3d71cf1ed668`。R4S 本机向 127.0.0.1 和它的 LAN 地址都能查询到 NAS 的 `nas.lan` A 记录。Windows 向同一 LAN 地址发出的 UDP 和 TCP 查询收到 NXDOMAIN。观察到答复经 DAE 的 `dae0` 进入软路由后发回 Windows。Windows 查询 `example.com` 有正常应答。此次确认了本地记录正常、终端 DNS 路径不同；未核实 DAE 使用的最终上游。
+
+- 用已安装的 LuCI 页面观察 Windows 的实际 A 查询，页面保留软路由侧成功结果，并显示终端的 NXDOMAIN 与 `dae0`。浏览器单独点击时没有观察到明文 DNS，页面标记终端路径待核对。在 390 像素视口复测，验证登录及 CSRF 校验。
+- R4S 的 `tests/lan-dns.sh` 验证 IPv4/IPv6、UDP/TCP、不同记录类型、事务关联和其他名称排除。设备互访、网站诊断和拓扑回归通过。安装前后 network、firewall、dhcp 摘要一致，现场观察结束后已退出临时监听。
+
 ## v0.14 NAS 文件共享分项诊断
 
 2026-11-23，在 NanoPi R4S 的 iStoreOS 25.12.6 和 Argon 上安装并验证提交 `ccdb5599cb8a0246e070a55adff2098bd8af963c`。真实 NAS 从软路由的 TCP 445 返回 SMB 3.1.1 协商响应。软路由本地 DNS 的 `nas.lan` 和目标网段的 `nas.local` SMB 通告均指向该 NAS。Windows 原生端口检查能连接 445，但单独向软路由地址查询 `nas.lan` 返回 NXDOMAIN。LuCI 因此保留软路由和终端的验证边界。
