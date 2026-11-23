@@ -1,5 +1,13 @@
 # 预览版验证记录
 
+## v0.13 NAS 终端侧诊断
+
+2026-11-23，在 NanoPi R4S 的 iStoreOS 25.12.6 和 Argon 上安装提交 `2c9697c3323d7c5fec4e7086dfb42907d3d0a9fc`。从 Windows 上的 Chromium 打开 LuCI 选择真实 NAS，浏览器直接从 NAS 的 HTTP 5000 端口取得响应，软路由也返回 HTTP 200。软路由连通 SMB 445，HTTPS 443 返回证书校验失败。界面标注终端 SMB 待核对，并提供两个可在系统文件管理器里使用的地址格式。
+
+- 实际 NAS 的 HTTP 80 跳转到另一个端口。浏览器探测的内容安全策略拦截了该跳转，浏览器未确认该项，但保留了软路由的 302 证据。检查浏览器只使用 HEAD，未携带 Cookie、Authorization 或 Referer。
+- 模拟浏览器侧请求被拦截，界面保留软路由的成功证据，将本机标为未确认。移除拦截后复测恢复，桌面及 390 像素视口均通过。撤销拓扑读取权限后 RPC 被拒绝。现场验证使用 Windows 浏览器和手机尺寸模拟。
+- 在 R4S 通过 `tests/lan-access.sh` 的网页端口、证书失败、无可用入口和越界目标测试。拓扑、接线图和指定网站回归测试通过。安装前后 network、firewall、dhcp 配置摘要一致。
+
 ## v0.12 家庭设备互访
 
 2026-11-23，在 NanoPi R4S 的 iStoreOS 25.12.6 和 Argon 上安装并验证提交 `0e8c26fb0d0c343180c7f3c627ac8a1baa606661`。实际 LuCI 会识别来源连接和目标设备处在同一 LAN。真实 NAS 出现在设备列表，选中后返回 Ping 有应答、TCP 445 可连接及 SMB mDNS 通告。安装前后 network、firewall、dhcp 配置摘要一致。
