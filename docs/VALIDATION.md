@@ -1,5 +1,12 @@
 # 预览版验证记录
 
+## v0.16 从 NAS 故障到可试连地址
+
+2026-11-23，在 NanoPi R4S 的 iStoreOS 25.12.6 和 Argon 上安装并验证提交 `5229a8713de1ca65224d8def2c5aa8d3527501a6`。从首页选择 **NAS 连不上** 并检查真实 NAS，R4S 完成 SMB 协商，Windows 对同一 IP 的 TCP 445 复测成功。页面给出 Windows 和 SMB 两种可复制的 IP 地址。实际打开共享需要终端登录，现场未读取 NAS 文件。
+
+- 在 Chromium 测试从 `nas.lan` 的 DNS 检查转入 SMB 检查、真实复制事件与手动复制回退、手工标记共享已打开或权限被拒绝，以及 TCP 被拒时的操作建议和恢复后复测。测试拦截复制事件，保留桌面剪贴板内容。
+- 核对桌面与 390 像素布局，首页保留常用入口，正常体检仍显示进度并完成。设备互访和局域网 DNS 回归测试通过。安装前后 network、firewall、dhcp 配置摘要一致。
+
 ## v0.15 局域网 DNS 路径诊断
 
 2026-11-23，在 NanoPi R4S 的 iStoreOS 25.12.6 和 Argon 上安装并验证提交 `52d35fd53bd85b37c260024ec31f3d71cf1ed668`。R4S 本机向 127.0.0.1 和它的 LAN 地址都能查询到 NAS 的 `nas.lan` A 记录。Windows 向同一 LAN 地址发出的 UDP 和 TCP 查询收到 NXDOMAIN。观察到答复经 DAE 的 `dae0` 进入软路由后发回 Windows。Windows 查询 `example.com` 有正常应答。此次确认了本地记录正常、终端 DNS 路径不同；未核实 DAE 使用的最终上游。
